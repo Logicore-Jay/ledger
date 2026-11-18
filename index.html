@@ -1,0 +1,1329 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>월간 가계부</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1f5c4f">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="가계부">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: 장부 한 쪽. 상단에 월 이동·요약, 탭으로 '가계부'(입력·분석·내역)와 '카드'(카드별 상환 계획·명세서 대조)를 오간다. */
+:root {
+  --bg: #f1f4f3;
+  --surface: #ffffff;
+  --ink: #17211f;
+  --muted: #5b6965;
+  --line: #dbe2df;
+  --accent: #1f5c4f;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3efeb;
+  --income: #2457c5;
+  --expense: #c23a30;
+  --warn: #a8700f;
+  --font-display: "Gowun Batang", "Nanum Myeongjo", "Batang", serif;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --radius: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101715; --surface: #18211f; --ink: #e4ece9; --muted: #94a39e; --line: #2a3633;
+    --accent: #62bfa6; --accent-ink: #0d1a16; --accent-soft: #1d302b;
+    --income: #86a9ff; --expense: #ff8174; --warn: #e2a84c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101715; --surface: #18211f; --ink: #e4ece9; --muted: #94a39e; --line: #2a3633;
+  --accent: #62bfa6; --accent-ink: #0d1a16; --accent-soft: #1d302b;
+  --income: #86a9ff; --expense: #ff8174; --warn: #e2a84c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.num { font-variant-numeric: tabular-nums; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.wrap { max-width: 1160px; margin: 0 auto; padding: 24px 20px 72px; display: grid; gap: 20px; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.brand h1 { font-family: var(--font-display); font-size: 26px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.status { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.status[data-state="ok"]::before { background: var(--accent); }
+.status[data-state="local"]::before { background: var(--warn); }
+.status[data-state="err"]::before { background: var(--expense); }
+.headright { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.monthnav { display: flex; align-items: center; gap: 6px; }
+.monthnav .label { font-family: var(--font-display); font-size: 20px; font-weight: 700; min-width: 128px; text-align: center; }
+.iconbtn { width: 36px; height: 36px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); display: inline-grid; place-items: center; font-size: 18px; line-height: 1; }
+.iconbtn:hover, .textbtn:hover { border-color: var(--accent); }
+.textbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; font-size: 13.5px; }
+.cur select { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 8px; font-size: 13.5px; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs a { padding: 8px 14px; text-decoration: none; color: var(--muted); font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs a .count { font-weight: 400; font-size: 12.5px; margin-left: 4px; }
+
+.summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 2px; min-width: 0; align-content: start; }
+.tile .k { font-size: 13px; color: var(--muted); }
+.tile .v { font-size: 23px; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.tile .hint { font-size: 12px; color: var(--muted); }
+.v.income { color: var(--income); }
+.v.expense { color: var(--expense); }
+.budget { grid-column: 1 / -1; gap: 8px; }
+.budget .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.meter { height: 10px; border-radius: 6px; background: var(--accent-soft); overflow: hidden; }
+.meter > span { display: block; height: 100%; background: var(--accent); border-radius: 6px; transition: width .3s ease; }
+[data-level="warn"] .meter > span { background: var(--warn); }
+[data-level="over"] .meter > span { background: var(--expense); }
+.note { font-size: 13px; color: var(--muted); }
+[data-level="over"] .note strong { color: var(--expense); }
+.inline-edit { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.inline-edit input { width: 140px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+
+.banner { border: 1px dashed var(--warn); background: color-mix(in srgb, var(--warn) 9%, var(--surface)); border-radius: var(--radius); padding: 10px 14px; font-size: 14px; }
+
+.main { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+.col { display: grid; gap: 20px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.card h2 { font-size: 15px; font-weight: 600; margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; text-wrap: balance; }
+.card h2 .sub { font-size: 12.5px; font-weight: 400; color: var(--muted); }
+
+form.entry, form.cardform { display: grid; gap: 12px; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); border-radius: 8px; padding: 3px; background: var(--bg); }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { text-align: center; padding: 7px 4px; border-radius: 6px; font-weight: 600; color: var(--muted); cursor: pointer; font-size: 14px; }
+.seg input:checked + label { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.seg input#t-expense:checked + label { color: var(--expense); }
+.seg input#t-income:checked + label { color: var(--income); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 1px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field > label, .field > .lbl { font-size: 13px; color: var(--muted); }
+.field input, .field select { width: 100%; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.field input:focus, .field select:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.field .help { font-size: 12.5px; color: var(--muted); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.amount-wrap { position: relative; }
+.amount-wrap input { font-size: 20px; font-weight: 600; padding-left: 30px; text-align: right; }
+.amount-wrap span { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-weight: 600; }
+.quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+.quick button:hover { border-color: var(--accent); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 10px 16px; font-weight: 600; flex: 1; }
+.primary:hover { filter: brightness(1.07); }
+.ghost { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+.danger { background: transparent; border: 1px solid color-mix(in srgb, var(--expense) 45%, var(--line)); color: var(--expense); border-radius: 8px; padding: 10px 14px; }
+.form-error { color: var(--expense); font-size: 13px; margin: 0; }
+.form-error:empty { display: none; }
+.editing-tag { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+.formnote { font-size: 13px; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 8px 10px; margin: 0; }
+
+.cats { display: grid; gap: 10px; }
+.cat { display: grid; grid-template-columns: 92px 1fr auto; gap: 10px; align-items: center; font-size: 13.5px; }
+.cat .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cat .bar { height: 8px; background: var(--accent-soft); border-radius: 4px; overflow: hidden; }
+.cat .bar span { display: block; height: 100%; background: var(--expense); opacity: .85; border-radius: 4px; }
+.cat .amt { text-align: right; white-space: nowrap; }
+.cat .amt em { font-style: normal; color: var(--muted); font-size: 12px; margin-left: 6px; display: inline-block; min-width: 34px; }
+.empty { color: var(--muted); font-size: 14px; padding: 6px 0; margin: 0; }
+
+.chart svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--muted); flex-wrap: wrap; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chips { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; padding: 2px; background: var(--bg); }
+.chips button { border: 0; background: transparent; padding: 5px 11px; border-radius: 6px; font-size: 13.5px; color: var(--muted); }
+.chips button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.toolbar select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 13.5px; }
+.toolbar input[type="search"] { flex: 1; min-width: 140px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.day { display: grid; gap: 2px; }
+.day + .day { margin-top: 10px; }
+.dayhead { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 6px 2px; border-bottom: 1px solid var(--line); }
+.dayhead strong { color: var(--ink); font-weight: 600; }
+.item { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 9px 6px; border-radius: 8px; }
+.item.clickable { cursor: pointer; }
+.item.clickable:hover { background: var(--accent-soft); }
+.item.active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); white-space: nowrap; }
+.tag.income { color: var(--income); border-color: color-mix(in srgb, var(--income) 35%, var(--line)); }
+.tag.payment { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.memo { overflow: hidden; min-width: 0; display: grid; }
+.memo b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memo b.none { color: var(--muted); }
+.memo small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.amt-cell { font-weight: 600; white-space: nowrap; text-align: right; }
+.amt-cell.income { color: var(--income); }
+.amt-cell.payment { color: var(--muted); }
+.del { width: 28px; height: 28px; border-radius: 6px; border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; }
+.del:hover { color: var(--expense); background: var(--bg); }
+.list-foot { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 12px; align-items: center; }
+
+/* Cards view */
+.cardlist { display: grid; gap: 10px; }
+.ccard { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 12px 14px 12px 18px; display: grid; gap: 4px; position: relative; width: 100%; }
+.ccard::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 4px; border-radius: 0 3px 3px 0; background: var(--muted); }
+.ccard[data-kind="full"]::before { background: var(--accent); }
+.ccard[data-kind="fixed"]::before { background: var(--income); }
+.ccard[data-kind="minimum"]::before { background: var(--warn); }
+.ccard[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.ccard .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.ccard .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ccard .big { font-size: 18px; font-weight: 600; }
+.ccard .line { font-size: 12.5px; color: var(--muted); }
+.ccard .line.alert { color: var(--expense); font-weight: 600; }
+.ccard .line.good { color: var(--accent); font-weight: 600; }
+.pill { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; color: var(--muted); }
+.pill[data-kind="full"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.pill[data-kind="fixed"] { color: var(--income); border-color: color-mix(in srgb, var(--income) 40%, var(--line)); }
+.pill[data-kind="minimum"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.stat { background: var(--bg); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
+.stat .k { font-size: 12.5px; color: var(--muted); }
+.stat .v { font-size: 18px; font-weight: 600; overflow-wrap: anywhere; }
+.stat.alert { background: color-mix(in srgb, var(--expense) 10%, var(--surface)); }
+.stat.alert .v { color: var(--expense); }
+.stat.good .v { color: var(--accent); }
+.callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 12px; border-radius: 0 8px 8px 0; font-size: 14px; }
+.callout.warn { border-left-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.callout.alert { border-left-color: var(--expense); background: color-mix(in srgb, var(--expense) 10%, var(--surface)); }
+.stmtnav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.stmtnav .label { font-weight: 600; min-width: 0; }
+.stmtnav .range { font-size: 12.5px; color: var(--muted); }
+.detail-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+.detail-head h2 { font-family: var(--font-display); font-size: 20px; }
+.paylist { display: grid; gap: 4px; font-size: 14px; }
+.paylist div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 2px; border-bottom: 1px solid var(--line); }
+
+.toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); border-radius: 10px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; font-size: 14px; box-shadow: 0 6px 24px rgb(0 0 0 / .2); max-width: calc(100% - 32px); z-index: 10; }
+.toast button { background: transparent; border: 0; color: var(--bg); font-weight: 700; text-decoration: underline; padding: 0; }
+
+@media (max-width: 940px) {
+  .summary { grid-template-columns: 1fr 1fr; }
+  .main { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .wrap { padding: 16px 16px 64px; }
+  .tile .v { font-size: 19px; }
+  .two { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: 1fr 1fr; }
+  .item { grid-template-columns: auto 1fr auto; }
+  .item .del { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>월간 가계부</h1>
+      <span class="status" id="status" data-state="loading">불러오는 중…</span>
+    </div>
+    <div class="headright">
+      <nav class="monthnav" aria-label="달 이동">
+        <button class="iconbtn" id="prev" type="button" aria-label="이전 달">‹</button>
+        <div class="label num" id="monthLabel" aria-live="polite"></div>
+        <button class="iconbtn" id="next" type="button" aria-label="다음 달">›</button>
+        <button class="textbtn" id="today" type="button">이번 달</button>
+      </nav>
+      <label class="cur"><span class="visually-hidden" hidden>통화</span>
+        <select id="currency" aria-label="통화">
+          <option value="USD">$ 달러</option>
+          <option value="KRW">₩ 원</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="보기">
+    <a href="#ledger" id="tab-ledger">가계부</a>
+    <a href="#cards" id="tab-cards">카드 <span class="count" id="cardCount"></span></a>
+  </nav>
+
+  <div class="banner" id="exampleBanner" hidden>
+    지금 보이는 카드와 내역은 <strong>예시</strong>예요. 카드 탭에서 내 카드를 추가하거나 첫 내역을 기록하면 예시는 사라집니다.
+  </div>
+
+  <!-- ============ LEDGER ============ -->
+  <div id="view-ledger" class="col">
+    <section class="summary" aria-label="이번 달 요약">
+      <div class="tile"><span class="k">수입</span><span class="v income num" id="sIncome">0</span></div>
+      <div class="tile"><span class="k">지출 (실제 소비)</span><span class="v expense num" id="sExpense">0</span><span class="hint" id="sExpenseHint"></span></div>
+      <div class="tile"><span class="k">카드 대금 납부</span><span class="v num" id="sPaid">0</span><span class="hint">지출에 다시 더하지 않아요</span></div>
+      <div class="tile"><span class="k">현금 흐름</span><span class="v num" id="sFlow">0</span><span class="hint">수입 − 현금 지출 − 카드 대금</span></div>
+      <div class="tile budget" id="budgetTile">
+        <div class="row">
+          <span class="k">월 예산 (지출 기준)</span>
+          <span id="budgetView"><span class="num" id="budgetValue"></span> <button class="textbtn" id="budgetEditBtn" type="button">예산 설정</button></span>
+          <form class="inline-edit" id="budgetForm" hidden>
+            <label for="budgetInput" class="k">월 예산</label>
+            <input id="budgetInput" inputmode="decimal" autocomplete="off" class="num">
+            <button class="textbtn" type="submit">저장</button>
+            <button class="textbtn" type="button" id="budgetCancel">취소</button>
+          </form>
+        </div>
+        <div class="meter" role="progressbar" aria-label="예산 사용률" id="meter" aria-valuemin="0" aria-valuemax="100"><span id="meterFill" style="width:0%"></span></div>
+        <div class="note" id="budgetNote"></div>
+      </div>
+    </section>
+
+    <div class="main">
+      <div class="col">
+        <section class="card" aria-labelledby="formTitle">
+          <h2 id="formTitle"><span>기록하기</span> <span class="editing-tag" id="editingTag" hidden>수정 중</span></h2>
+          <form class="entry" id="entryForm" novalidate>
+            <div class="seg" role="radiogroup" aria-label="구분">
+              <input type="radio" name="type" id="t-expense" value="expense" checked><label for="t-expense">지출</label>
+              <input type="radio" name="type" id="t-income" value="income"><label for="t-income">수입</label>
+              <input type="radio" name="type" id="t-payment" value="payment"><label for="t-payment">카드 대금</label>
+            </div>
+            <p class="formnote" id="paymentNote" hidden>카드 회사에 낸 돈이에요. 사용 내역은 이미 지출로 적었으니 지출 합계에는 더하지 않고, 카드 잔액과 명세서 대조에 쓰여요.</p>
+            <div class="field">
+              <label for="fAmount">금액</label>
+              <div class="amount-wrap"><span id="curSym">$</span><input id="fAmount" inputmode="decimal" autocomplete="off" class="num" placeholder="0.00"></div>
+              <div class="quick" id="quick" aria-label="금액 더하기"></div>
+            </div>
+            <div class="two">
+              <div class="field"><label for="fDate">날짜</label><input type="date" id="fDate" required></div>
+              <div class="field" id="catField"><label for="fCat">분류</label><select id="fCat"></select></div>
+              <div class="field" id="payCardField" hidden><label for="fPayCard">어느 카드?</label><select id="fPayCard"></select></div>
+            </div>
+            <div class="field" id="methodField">
+              <label for="fMethod">결제 수단</label>
+              <select id="fMethod"></select>
+              <span class="help" id="methodHelp"></span>
+            </div>
+            <div class="field" id="stmtField" hidden>
+              <label for="fStmt">어느 명세서 대금?</label>
+              <select id="fStmt"></select>
+            </div>
+            <div class="field"><label for="fMemo">메모 (선택)</label><input id="fMemo" maxlength="80" autocomplete="off" placeholder="예: Costco 장보기, 점심"></div>
+            <p class="form-error" id="formError" role="alert"></p>
+            <div class="actions">
+              <button class="primary" type="submit" id="submitBtn">추가</button>
+              <button class="ghost" type="button" id="cancelEdit" hidden>취소</button>
+              <button class="danger" type="button" id="deleteEdit" hidden>삭제</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card" aria-labelledby="catTitle">
+          <h2 id="catTitle">분류별 지출 <span class="sub" id="catSub"></span></h2>
+          <div class="cats" id="cats"></div>
+        </section>
+
+        <section class="card" aria-labelledby="methodTitle">
+          <h2 id="methodTitle">결제 수단별 지출</h2>
+          <div class="cats" id="methods"></div>
+        </section>
+      </div>
+
+      <div class="col">
+        <section class="card chart" aria-labelledby="chartTitle">
+          <h2 id="chartTitle">날짜별 지출 <span class="sub" id="chartSub"></span></h2>
+          <div id="chart"></div>
+          <div class="legend"><span><i style="background:var(--expense)"></i>그날 지출</span><span><i style="background:var(--accent)"></i>예산 기준 하루 몫</span></div>
+        </section>
+
+        <section class="card" aria-labelledby="listTitle">
+          <h2 id="listTitle">내역 <span class="sub" id="listSub"></span></h2>
+          <div class="toolbar">
+            <div class="chips" role="group" aria-label="구분 필터" id="typeChips">
+              <button type="button" data-filter="all" aria-pressed="true">전체</button>
+              <button type="button" data-filter="expense" aria-pressed="false">지출</button>
+              <button type="button" data-filter="income" aria-pressed="false">수입</button>
+              <button type="button" data-filter="payment" aria-pressed="false">카드 대금</button>
+            </div>
+            <select id="methodFilter" aria-label="결제 수단 필터"></select>
+            <input type="search" id="search" placeholder="메모·분류 검색" aria-label="메모 또는 분류 검색">
+          </div>
+          <div id="list"></div>
+          <div class="list-foot">
+            <span id="listCount"></span>
+            <button class="textbtn" type="button" id="copyCsv">이 달 내역 CSV 복사</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CARDS ============ -->
+  <div id="view-cards" class="main" hidden>
+    <div class="col">
+      <section class="card" aria-labelledby="cardsTitle">
+        <h2 id="cardsTitle">내 카드 <span class="sub">누르면 자세히 보여요</span></h2>
+        <div class="cardlist" id="cardList"></div>
+        <button class="textbtn" type="button" id="addCardBtn">+ 카드 추가</button>
+      </section>
+
+      <section class="card" id="cardFormCard" hidden aria-labelledby="cardFormTitle">
+        <h2 id="cardFormTitle">카드 추가</h2>
+        <form class="cardform" id="cardForm" novalidate>
+          <div class="field"><label for="cName">카드 이름</label><input id="cName" maxlength="40" autocomplete="off" placeholder="예: 주 사용 카드, 가구 할부 카드"></div>
+          <div class="field">
+            <span class="lbl" id="kindLbl">갚는 방식</span>
+            <div class="seg" role="radiogroup" aria-labelledby="kindLbl">
+              <input type="radio" name="kind" id="k-full" value="full" checked><label for="k-full">매월 전액</label>
+              <input type="radio" name="kind" id="k-fixed" value="fixed"><label for="k-fixed">고정 금액</label>
+              <input type="radio" name="kind" id="k-minimum" value="minimum"><label for="k-minimum">최소 금액·이월</label>
+            </div>
+            <span class="help" id="kindHelp"></span>
+          </div>
+          <div class="two">
+            <div class="field"><label for="cClose">명세서 마감일</label><select id="cClose"></select></div>
+            <div class="field"><label for="cDue">납부일</label><select id="cDue"></select></div>
+          </div>
+          <div class="field" id="cFixedField"><label for="cFixed">매월 갚는 고정 금액</label><input id="cFixed" inputmode="decimal" autocomplete="off" class="num" placeholder="예: 100"></div>
+          <div class="two" id="cMinFields">
+            <div class="field"><label for="cMin">최소 납부액</label><input id="cMin" inputmode="decimal" autocomplete="off" class="num" placeholder="예: 35"></div>
+            <div class="field"><label for="cPromo">무이자 끝나는 날 (선택)</label><input type="date" id="cPromo"></div>
+          </div>
+          <div class="two" id="cStartFields">
+            <div class="field"><label for="cStart">기록 시작 시점 잔액</label><input id="cStart" inputmode="decimal" autocomplete="off" class="num" placeholder="예: 1,800"></div>
+            <div class="field"><label for="cStartDate">그 잔액 기준일</label><input type="date" id="cStartDate"></div>
+          </div>
+          <p class="formnote" id="cStartNote">가계부를 쓰기 전부터 남아 있던 잔액이에요. 이후의 사용과 납부를 더하고 빼서 현재 잔액을 계산해요.</p>
+          <p class="form-error" id="cardError" role="alert"></p>
+          <div class="actions">
+            <button class="primary" type="submit" id="cardSubmit">카드 저장</button>
+            <button class="ghost" type="button" id="cardCancel">취소</button>
+            <button class="danger" type="button" id="cardDelete" hidden>카드 삭제</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card" id="cardDetail" aria-live="polite"></section>
+    </div>
+  </div>
+
+  <section class="card" aria-labelledby="backupTitle">
+    <h2 id="backupTitle">데이터 백업 <span class="sub" id="backupSub"></span></h2>
+    <p class="note" style="margin:0">기록은 이 기기의 브라우저 안에만 저장돼요. 휴대폰을 바꾸거나 브라우저 데이터를 지우면 사라지니, 가끔 백업 파일을 저장해 두세요. 다른 기기로 옮길 때도 이 파일을 불러오면 돼요.</p>
+    <div class="actions">
+      <button class="textbtn" type="button" id="backupSave">백업 파일 저장</button>
+      <button class="textbtn" type="button" id="backupLoadBtn">백업 파일 불러오기</button>
+      <input type="file" id="backupFile" accept="application/json,.json" hidden>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast" role="status" hidden><span id="toastMsg"></span><button type="button" id="toastAction" hidden></button></div>
+
+<script>
+(() => {
+  "use strict";
+  const CATS = {
+    expense: ["장보기", "외식", "카페·간식", "교통·주유", "주거", "공과금·통신", "쇼핑", "생활용품", "의료", "문화·여가", "구독", "교육", "경조사·선물", "보험", "여행", "기타"],
+    income: ["급여", "부수입", "환급·이자", "용돈", "기타"],
+  };
+  const KIND = {
+    full: { label: "매월 전액", help: "매달 명세서 금액을 전부 갚아요. 낸 금액과 기록한 사용 내역을 명세서별로 맞춰 볼 수 있어요." },
+    fixed: { label: "고정 금액", help: "매달 정해진 금액씩 갚아요. 남은 잔액과 완납 예상 시점을 보여 드려요." },
+    minimum: { label: "최소 금액·이월", help: "최소 금액만 내고 나머지는 이월해요. 무이자가 끝나기 전에 다 갚으려면 매달 얼마가 필요한지 알려 드려요." },
+  };
+  const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  const $ = (id) => document.getElementById(id);
+  const pad = (n) => String(n).padStart(2, "0");
+  const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const ymOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const addMonths = (key, n) => { const [y, m] = key.split("-").map(Number); return ymOf(new Date(y, m - 1 + n, 1)); };
+  const daysIn = (key) => { const [y, m] = key.split("-").map(Number); return new Date(y, m, 0).getDate(); };
+  const monthName = (key) => { const [y, m] = key.split("-").map(Number); return `${y}년 ${m}월`; };
+  const md = (s) => `${Number(s.slice(5, 7))}/${Number(s.slice(8, 10))}`;
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const newId = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const round2 = (n) => Math.round(n * 100) / 100;
+
+  const now = new Date();
+  const TODAY = ymd(now);
+  const CUR_MONTH = ymOf(now);
+
+  const state = {
+    month: CUR_MONTH, entries: [], cards: [], budget: 0, currency: "USD",
+    loaded: false, backend: null, editingId: null, filter: "all", methodFilter: "all", query: "",
+    view: "ledger", selectedCard: null, stmtKey: null, editingCard: null, lastMethod: "cash",
+  };
+
+  // ---------- money ----------
+  const isKRW = () => state.currency === "KRW";
+  const sym = () => (isKRW() ? "₩" : "$");
+  function money(n, signed) {
+    const a = Math.abs(n);
+    const body = isKRW() ? Math.round(a).toLocaleString("ko-KR") : a.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const sign = n < 0 ? "−" : signed && n > 0 ? "+" : "";
+    return `${sign}${sym()}${body}`;
+  }
+  function moneyShort(n) {
+    if (isKRW()) { if (n >= 10000) { const v = n / 10000; return (Number.isInteger(v) ? v : v.toFixed(1)) + "만"; } return Math.round(n).toLocaleString("ko-KR"); }
+    if (n >= 1000) { const v = n / 1000; return "$" + (Number.isInteger(v) ? v : v.toFixed(1)) + "k"; }
+    return "$" + Math.round(n);
+  }
+  function parseAmount(s) {
+    const cleaned = String(s).replace(/[^\d.]/g, "");
+    const n = parseFloat(cleaned);
+    if (!Number.isFinite(n)) return 0;
+    return isKRW() ? Math.round(n) : round2(n);
+  }
+  const plainAmount = (n) => (n ? (isKRW() ? Math.round(n).toLocaleString("ko-KR") : n.toLocaleString("en-US", { maximumFractionDigits: 2 })) : "");
+
+  // ---------- examples ----------
+  function exampleCards() {
+    return [
+      { id: "exc1", name: "주 사용 카드", kind: "full", closingDay: 0, dueDay: 25, startBalance: 0, startDate: "" },
+      { id: "exc2", name: "가구 할부 카드", kind: "fixed", closingDay: 20, dueDay: 15, fixedPayment: 100, startBalance: 1800, startDate: `${addMonths(CUR_MONTH, -1)}-01` },
+      { id: "exc3", name: "무이자 이월 카드", kind: "minimum", closingDay: 5, dueDay: 1, minPayment: 35, promoEnd: `${now.getFullYear() + 1}-06-30`, startBalance: 2400, startDate: `${addMonths(CUR_MONTH, -1)}-01` },
+    ];
+  }
+  function exampleEntries() {
+    const P = addMonths(CUR_MONTH, -1), C = CUR_MONTH;
+    const raw = [
+      // 지난달 주 카드 사용 (지난달 명세서)
+      [P, 2, "expense", "장보기", 142.36, "Costco", "exc1"], [P, 4, "expense", "외식", 58.4, "가족 저녁", "exc1"],
+      [P, 6, "expense", "교통·주유", 52.1, "주유", "exc1"], [P, 9, "expense", "구독", 15.49, "넷플릭스", "exc1"],
+      [P, 12, "expense", "쇼핑", 89.99, "아마존 겨울 재킷", "exc1"], [P, 15, "expense", "장보기", 96.2, "H Mart", "exc1"],
+      [P, 18, "expense", "공과금·통신", 85, "휴대폰 요금", "exc1"], [P, 21, "expense", "카페·간식", 23.75, "커피 3번", "exc1"],
+      [P, 24, "expense", "의료", 40, "진료 코페이", "exc1"], [P, 27, "expense", "장보기", 118.55, "Trader Joe's", "exc1"],
+      [P, 29, "expense", "교통·주유", 48.3, "주유", "exc1"], [P, 30, "expense", "외식", 62.15, "점심 모임", "exc1"],
+      // 이번 달
+      [C, 1, "income", "급여", 4200, "급여", "cash"], [C, 1, "expense", "주거", 1650, "렌트", "cash"],
+      [C, 2, "expense", "장보기", 131.8, "Costco", "exc1"], [C, 3, "expense", "카페·간식", 5.75, "라테", "exc1"],
+      [C, 5, "payment", "", 1000, "지난달 명세서 대금", "exc1", P], [C, 1, "payment", "", 35, "최소 납부", "exc3"],
+      [C, 6, "expense", "교통·주유", 47.9, "주유", "exc1"], [C, 8, "expense", "외식", 44.6, "피자", "exc1"],
+      [C, 9, "expense", "구독", 15.49, "넷플릭스", "exc1"], [C, 11, "expense", "생활용품", 32.4, "Target", "exc1"],
+      [C, 13, "expense", "공과금·통신", 120, "전기·가스", "cash"], [C, 14, "expense", "문화·여가", 38, "영화 2인", "exc1"],
+      [C, 15, "payment", "", 100, "할부 상환", "exc2"], [C, 15, "income", "부수입", 300, "프리랜스", "cash"],
+      [C, 16, "expense", "장보기", 104.25, "H Mart", "exc1"], [C, 17, "expense", "카페·간식", 12.5, "베이커리", "exc1"],
+    ];
+    return raw.map((r, i) => {
+      const date = `${r[0]}-${pad(Math.min(r[1], daysIn(r[0])))}`;
+      const e = { id: "ex" + i, example: true, date, type: r[2], amount: r[4], memo: r[5], createdAt: i };
+      if (r[2] === "payment") { e.card = r[6]; e.stmt = r[7] || ""; }
+      else { e.category = r[3]; e.method = r[2] === "expense" ? r[6] : "cash"; }
+      return e;
+    }).filter((e) => e.date <= TODAY);
+  }
+  const showingExamples = () => state.loaded && state.entries.length === 0 && state.cards.length === 0;
+  const allEntries = () => (showingExamples() ? exampleEntries() : state.entries);
+  const allCards = () => (showingExamples() ? exampleCards() : state.cards);
+  const effectiveBudget = () => (state.budget > 0 ? state.budget : showingExamples() ? 2500 : 0);
+  const cardById = (id) => allCards().find((c) => c.id === id);
+  const methodName = (m) => (!m || m === "cash" ? "현금·계좌" : (cardById(m) || { name: "삭제된 카드" }).name);
+
+  // ---------- statements ----------
+  // A statement is keyed by the month in which it closes ("YYYY-MM").
+  function closeDayOf(card, key) { const last = daysIn(key); return card.closingDay ? Math.min(card.closingDay, last) : last; }
+  function stmtOf(card, date) {
+    const key = date.slice(0, 7);
+    return Number(date.slice(8, 10)) <= closeDayOf(card, key) ? key : addMonths(key, 1);
+  }
+  function stmtRange(card, key) {
+    const prev = addMonths(key, -1);
+    const [py, pm] = prev.split("-").map(Number);
+    const start = ymd(new Date(py, pm - 1, closeDayOf(card, prev) + 1));
+    return [start, `${key}-${pad(closeDayOf(card, key))}`];
+  }
+  function stmtLabel(card, key) {
+    const [s, e] = stmtRange(card, key);
+    return { title: `${Number(key.slice(5))}월 마감 명세서`, range: `${md(s)} – ${md(e)}`, closed: e < TODAY };
+  }
+  const defaultStmtFor = (card, date) => addMonths(stmtOf(card, date), -1);
+  const chargesOf = (cardId) => allEntries().filter((e) => e.type === "expense" && e.method === cardId);
+  const paymentsOf = (cardId) => allEntries().filter((e) => e.type === "payment" && e.card === cardId);
+  const sum = (arr) => round2(arr.reduce((a, e) => a + (Number(e.amount) || 0), 0));
+
+  function cardBalance(card) {
+    const from = card.startDate || "";
+    const ch = sum(chargesOf(card.id).filter((e) => e.date >= from));
+    const pay = sum(paymentsOf(card.id).filter((e) => e.date >= from));
+    return round2((Number(card.startBalance) || 0) + ch - pay);
+  }
+  const paidInMonth = (card, key) => sum(paymentsOf(card.id).filter((e) => e.date.startsWith(key)));
+
+  function cardPlan(card) {
+    const bal = cardBalance(card);
+    const paidNow = paidInMonth(card, CUR_MONTH);
+    const plan = { bal, paidNow };
+    if (card.kind === "fixed" && card.fixedPayment > 0) {
+      const n = Math.max(0, Math.ceil(bal / card.fixedPayment - 1e-9));
+      plan.months = n;
+      plan.payoff = n ? addMonths(CUR_MONTH, paidNow > 0 ? n : n - 1) : null;
+    }
+    if (card.kind === "minimum") {
+      if (card.promoEnd) {
+        const [py, pm] = card.promoEnd.split("-").map(Number);
+        const [ty, tm] = CUR_MONTH.split("-").map(Number);
+        const left = (py - ty) * 12 + (pm - tm) + (paidNow > 0 ? 0 : 1);
+        plan.promoPassed = card.promoEnd < TODAY;
+        plan.monthsLeft = Math.max(1, left);
+        plan.needed = bal > 0 ? round2(bal / plan.monthsLeft) : 0;
+        plan.daysToPromo = Math.round((new Date(card.promoEnd + "T00:00:00") - new Date(TODAY + "T00:00:00")) / 86400000);
+      }
+    }
+    if (card.kind === "full") {
+      const last = defaultStmtFor(card, TODAY);
+      plan.lastStmt = last;
+      plan.lastCharged = sum(chargesOf(card.id).filter((e) => stmtOf(card, e.date) === last));
+      plan.lastPaid = sum(paymentsOf(card.id).filter((e) => e.stmt === last));
+      plan.openStmt = stmtOf(card, TODAY);
+      plan.openCharged = sum(chargesOf(card.id).filter((e) => stmtOf(card, e.date) === plan.openStmt));
+    }
+    return plan;
+  }
+
+  // ---------- storage ----------
+  let col = null, settingsRef = null;
+  const LS_KEY = "monthly-ledger-v2";
+  function setStatus(kind, text) { const el = $("status"); el.dataset.state = kind; el.textContent = text; }
+  function applySettings(d) {
+    d = d || {};
+    state.budget = Number(d.budget) || 0;
+    state.currency = d.currency === "KRW" ? "KRW" : "USD";
+    state.cards = Array.isArray(d.cards) ? d.cards.filter((c) => c && c.id && c.name) : [];
+  }
+  const settingsBody = () => ({ budget: state.budget, currency: state.currency, cards: state.cards });
+
+  function useLocal(reason) {
+    state.backend = "local";
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_KEY) || "{}");
+      state.entries = Array.isArray(saved.entries) ? saved.entries : [];
+      applySettings(saved.settings);
+      setStatus("local", reason || "이 브라우저에만 저장돼요");
+    } catch (e) { setStatus("err", "저장할 수 없어요. 새로고침하면 기록이 사라집니다"); }
+    state.loaded = true;
+    render();
+  }
+  function saveLocal() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify({ entries: state.entries, settings: settingsBody() })); }
+    catch (e) { toast("이 브라우저에 저장하지 못했어요"); }
+  }
+  async function initStorage() {
+    const c = window.claude;
+    if (!c || typeof c.use !== "function") { useLocal(); return; }
+    let db = null, uid = null;
+    try { db = await c.use("db"); } catch (e) { db = null; }
+    if (db) { try { const u = await c.use("user"); uid = u ? await u.id() : null; } catch (e) { uid = null; } }
+    if (!db || !uid) { useLocal("로그인하면 계정에 저장돼요 · 지금은 이 브라우저에만 저장"); return; }
+    state.backend = "db";
+    col = db.doc(`data/users/${uid}/ledger`).collection("entries");
+    settingsRef = db.doc(`data/users/${uid}/settings`);
+    let entriesReady = false, settingsReady = false;
+    const timer = setTimeout(() => setStatus("err", state.loaded ? "연결이 느려요 · 내용이 최신이 아닐 수 있어요" : "저장소에 아직 연결하지 못했어요"), 10000);
+    const ready = () => { if (entriesReady && settingsReady) { clearTimeout(timer); state.loaded = true; setStatus("ok", "내 계정에 저장됨 · 나만 볼 수 있어요"); } };
+    col.onSnapshot((snap) => {
+      state.entries = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (!snap.metadata.fromCache) entriesReady = true;
+      ready(); render();
+    }, (err) => { clearTimeout(timer); setStatus("err", "기록을 불러오지 못했어요 (" + ((err && err.code) || "오류") + ")"); state.loaded = true; render(); });
+    settingsRef.onSnapshot((s) => {
+      applySettings(s.exists ? s.data() : null);
+      if (!s.metadata.fromCache) settingsReady = true;
+      ready(); render();
+    }, () => { settingsReady = true; ready(); });
+  }
+  let settingsWrite = Promise.resolve();
+  function putSettings() {
+    if (state.backend !== "db") { saveLocal(); render(); return Promise.resolve(); }
+    const body = JSON.parse(JSON.stringify(settingsBody()));
+    settingsWrite = settingsWrite.catch(() => {}).then(() => settingsRef.set(body));
+    render();
+    return settingsWrite;
+  }
+  async function putEntry(entry) {
+    const { id, example, ...body } = entry;
+    if (state.backend === "db") await col.doc(id).set(body);
+    else {
+      const i = state.entries.findIndex((e) => e.id === id);
+      if (i >= 0) state.entries[i] = entry; else state.entries.push(entry);
+      saveLocal(); render();
+    }
+  }
+  async function removeEntry(id) {
+    if (state.backend === "db") await col.doc(id).delete();
+    else { state.entries = state.entries.filter((e) => e.id !== id); saveLocal(); render(); }
+  }
+  function explain(err) {
+    const code = err && err.code;
+    if (code === "quota_exceeded") return "저장 공간이 가득 찼어요. 오래된 내역을 지운 뒤 다시 시도해 주세요";
+    if (code === "invalid_argument") return "이 페이지에 저장할 권한이 없어요";
+    return "저장하지 못했어요. 잠시 후 다시 시도해 주세요";
+  }
+
+  // ---------- toast ----------
+  let toastTimer = null;
+  function toast(msg, actionLabel, action) {
+    $("toastMsg").textContent = msg;
+    const btn = $("toastAction");
+    if (actionLabel) { btn.hidden = false; btn.textContent = actionLabel; btn.onclick = () => { hideToast(); action(); }; }
+    else { btn.hidden = true; btn.onclick = null; }
+    $("toast").hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, actionLabel ? 6000 : 3500);
+  }
+  function hideToast() { $("toast").hidden = true; }
+
+  // ---------- render: shared ----------
+  function render() {
+    $("monthLabel").textContent = monthName(state.month);
+    $("exampleBanner").hidden = !showingExamples();
+    $("currency").value = state.currency;
+    $("curSym").textContent = sym();
+    $("fAmount").placeholder = isKRW() ? "0" : "0.00";
+    $("cardCount").textContent = allCards().length ? allCards().length : "";
+    $("view-ledger").hidden = state.view !== "ledger";
+    $("view-cards").hidden = state.view !== "cards";
+    $("tab-ledger").setAttribute("aria-current", state.view === "ledger" ? "page" : "false");
+    $("tab-cards").setAttribute("aria-current", state.view === "cards" ? "page" : "false");
+    renderQuick();
+    renderFormSelects();
+    if (state.view === "ledger") renderLedger(); else renderCards();
+  }
+  function renderQuick() {
+    const steps = isKRW() ? [[1000, "+1천"], [10000, "+1만"], [50000, "+5만"], [100000, "+10만"]] : [[1, "+$1"], [10, "+$10"], [50, "+$50"], [100, "+$100"]];
+    const html = steps.map(([v, l]) => `<button type="button" data-add="${v}">${l}</button>`).join("") + `<button type="button" data-add="0">지우기</button>`;
+    if ($("quick").dataset.cur !== state.currency) { $("quick").innerHTML = html; $("quick").dataset.cur = state.currency; }
+  }
+
+  // ---------- render: ledger ----------
+  const monthEntries = () => allEntries().filter((e) => typeof e.date === "string" && e.date.startsWith(state.month));
+
+  function renderLedger() {
+    const list = monthEntries();
+    let inc = 0, exp = 0, expCash = 0, paid = 0;
+    for (const e of list) {
+      if (e.type === "income") inc += e.amount;
+      else if (e.type === "payment") paid += e.amount;
+      else { exp += e.amount; if (!e.method || e.method === "cash") expCash += e.amount; }
+    }
+    $("sIncome").textContent = money(inc);
+    $("sExpense").textContent = money(exp);
+    $("sExpenseHint").textContent = exp ? `카드 ${money(exp - expCash)} · 현금 ${money(expCash)}` : "카드 사용 포함";
+    $("sPaid").textContent = money(paid);
+    const flow = inc - expCash - paid;
+    $("sFlow").textContent = money(flow);
+    $("sFlow").className = "v num" + (flow < 0 ? " expense" : "");
+    renderBudget(exp);
+    renderCats(list, exp);
+    renderMethods(list, exp);
+    renderChart(list);
+    renderList(list);
+  }
+
+  function renderBudget(exp) {
+    const b = effectiveBudget(), tile = $("budgetTile");
+    $("budgetEditBtn").textContent = state.budget > 0 ? "변경" : "예산 설정";
+    if (!b) {
+      $("budgetValue").textContent = "미설정";
+      $("meterFill").style.width = "0%"; $("meter").setAttribute("aria-valuenow", "0"); tile.dataset.level = "";
+      $("budgetNote").textContent = "예산을 정하면 남은 금액과 하루에 쓸 수 있는 돈을 알려드려요. 카드 대금은 예산에 포함하지 않아요.";
+      return;
+    }
+    $("budgetValue").textContent = money(b) + (state.budget > 0 ? "" : " (예시)");
+    const pct = (exp / b) * 100;
+    $("meterFill").style.width = Math.min(100, pct).toFixed(1) + "%";
+    $("meter").setAttribute("aria-valuenow", String(Math.round(pct)));
+    tile.dataset.level = pct > 100 ? "over" : pct >= 80 ? "warn" : "";
+    const left = b - exp;
+    let extra = "";
+    if (state.month === CUR_MONTH && left > 0) {
+      const remainDays = daysIn(state.month) - now.getDate() + 1;
+      extra = ` · 오늘 포함 ${remainDays}일, 하루 <span class="num">${money(left / remainDays)}</span>씩 쓸 수 있어요`;
+    }
+    $("budgetNote").innerHTML = left >= 0
+      ? `${Math.round(pct)}% 사용 · <span class="num">${money(left)}</span> 남음${extra}`
+      : `<strong>${Math.round(pct)}% 사용 · <span class="num">${money(-left)}</span> 초과</strong>`;
+  }
+
+  function barRows(rows, total, emptyText) {
+    if (!rows.length) return `<p class="empty">${emptyText}</p>`;
+    const max = rows[0][1];
+    return rows.map(([c, v]) => `
+      <div class="cat"><span class="name" title="${esc(c)}">${esc(c)}</span>
+        <span class="bar"><span style="width:${(v / max * 100).toFixed(1)}%"></span></span>
+        <span class="amt num">${money(v)}<em>${total ? Math.round(v / total * 100) : 0}%</em></span></div>`).join("");
+  }
+  function groupSum(list, keyFn) {
+    const m = new Map();
+    for (const e of list) { const k = keyFn(e); m.set(k, (m.get(k) || 0) + e.amount); }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  }
+  function renderCats(list, exp) {
+    const rows = groupSum(list.filter((e) => e.type === "expense"), (e) => e.category || "기타");
+    $("catSub").textContent = rows.length ? `${rows.length}개 분류` : "";
+    $("cats").innerHTML = barRows(rows, exp, "이 달의 지출이 아직 없어요.");
+  }
+  function renderMethods(list, exp) {
+    const rows = groupSum(list.filter((e) => e.type === "expense"), (e) => methodName(e.method));
+    $("methods").innerHTML = barRows(rows, exp, "이 달의 지출이 아직 없어요.");
+  }
+
+  function renderChart(list) {
+    const n = daysIn(state.month), daily = new Array(n).fill(0);
+    for (const e of list) if (e.type === "expense") { const d = Number(e.date.slice(8, 10)); if (d >= 1 && d <= n) daily[d - 1] += e.amount; }
+    const b = effectiveBudget(), pace = b ? b / n : 0;
+    const top = niceCeil(Math.max(...daily, pace, 1));
+    const W = 640, H = 200, L = 52, R = 8, T = 12, B = 24, iw = W - L - R, ih = H - T - B, bw = iw / n;
+    const yv = (v) => T + ih - (v / top) * ih;
+    const todayIdx = state.month === CUR_MONTH ? now.getDate() - 1 : -1;
+    let g = "";
+    for (const f of [0, 0.5, 1]) {
+      const yy = yv(top * f);
+      g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-width="1"/>`;
+      g += `<text x="${L - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${f === 0 ? "0" : moneyShort(top * f)}</text>`;
+    }
+    daily.forEach((v, i) => {
+      if (v <= 0) return;
+      const h = Math.max(1.5, (v / top) * ih), x = L + i * bw + bw * 0.18;
+      g += `<rect x="${x.toFixed(1)}" y="${(T + ih - h).toFixed(1)}" width="${(bw * 0.64).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="var(--expense)" opacity="${pace && v > pace ? 1 : 0.6}"><title>${Number(state.month.slice(5))}월 ${i + 1}일 · ${money(v)}</title></rect>`;
+    });
+    if (pace) g += `<line x1="${L}" x2="${W - R}" y1="${yv(pace)}" y2="${yv(pace)}" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 4"/>`;
+    const ticks = [1, 5, 10, 15, 20, 25, n].filter((d, i, a) => a.indexOf(d) === i && !(d === 25 && n - 25 < 3));
+    for (const d of ticks) g += `<text x="${L + (d - 1) * bw + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${d - 1 === todayIdx ? "var(--ink)" : "var(--muted)"}" font-weight="${d - 1 === todayIdx ? 700 : 400}">${d}일</text>`;
+    if (todayIdx >= 0 && !ticks.includes(todayIdx + 1)) g += `<text x="${L + todayIdx * bw + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--ink)" font-weight="700">오늘</text>`;
+    $("chart").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${monthName(state.month)} 날짜별 지출 막대 그래프">${g}</svg>`;
+    const spentDays = daily.filter((v) => v > 0).length, total = daily.reduce((a, v) => a + v, 0);
+    $("chartSub").textContent = spentDays ? `지출한 날 ${spentDays}일 · 하루 평균 ${money(total / spentDays)}` : "";
+  }
+  function niceCeil(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); for (const s of [1, 2, 2.5, 5, 10]) if (s * p >= v) return s * p; return 10 * p; }
+
+  function entryRow(e, opts = {}) {
+    const isPay = e.type === "payment";
+    const sign = e.type === "income" ? "+" : "−";
+    const tagText = isPay ? "카드 대금" : esc(e.category || "기타");
+    const memo = e.memo ? `<b>${esc(e.memo)}</b>` : `<b class="none">메모 없음</b>`;
+    let sub = "";
+    if (isPay) { const c = cardById(e.card); sub = `${esc(c ? c.name : "삭제된 카드")}${e.stmt && c ? " · " + esc(stmtLabel(c, e.stmt).title) : ""}`; }
+    else if (e.type === "expense") sub = esc(methodName(e.method));
+    if (opts.showDate) sub = `${md(e.date)} · ${sub}`;
+    const inner = `<span class="tag ${e.type}">${tagText}</span><span class="memo">${memo}${sub ? `<small>${sub}</small>` : ""}</span><span class="amt-cell num ${e.type}">${sign}${money(e.amount).replace("−", "")}</span>`;
+    if (e.example) return `<div class="item">${inner}<span></span></div>`;
+    return `<div class="item clickable${state.editingId === e.id ? " active" : ""}" data-id="${esc(e.id)}" role="button" tabindex="0" aria-label="${tagText} ${money(e.amount)} 수정">${inner}<button class="del" type="button" data-del="${esc(e.id)}" aria-label="${tagText} ${money(e.amount)} 삭제">×</button></div>`;
+  }
+
+  function renderList(list) {
+    const q = state.query.trim().toLowerCase();
+    const mf = state.methodFilter;
+    const rows = list
+      .filter((e) => state.filter === "all" || e.type === state.filter)
+      .filter((e) => mf === "all" || (e.type === "expense" && (e.method || "cash") === mf) || (e.type === "payment" && e.card === mf))
+      .filter((e) => !q || (e.memo || "").toLowerCase().includes(q) || (e.category || "").toLowerCase().includes(q))
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0)));
+    const subs = [];
+    if (state.filter !== "all") subs.push({ expense: "지출만", income: "수입만", payment: "카드 대금만" }[state.filter]);
+    if (mf !== "all") subs.push(methodName(mf));
+    $("listSub").textContent = subs.join(" · ");
+    $("listCount").textContent = `${rows.length}건` + (rows.length ? ` · 지출 ${money(sum(rows.filter((e) => e.type === "expense")))}` : "");
+    if (!rows.length) { $("list").innerHTML = `<p class="empty">${list.length ? "조건에 맞는 내역이 없어요." : "이 달에는 기록이 없어요. 왼쪽에서 첫 내역을 추가해 보세요."}</p>`; return; }
+    const groups = new Map();
+    for (const e of rows) { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); }
+    let html = "";
+    for (const [date, items] of groups) {
+      const d = new Date(date + "T00:00:00");
+      const spent = sum(items.filter((e) => e.type === "expense"));
+      html += `<div class="day"><div class="dayhead"><strong>${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})</strong><span class="num">${spent ? "지출 " + money(spent) : ""}</span></div>${items.map((e) => entryRow(e)).join("")}</div>`;
+    }
+    $("list").innerHTML = html;
+  }
+
+  // ---------- form ----------
+  const form = $("entryForm");
+  const typeVal = () => form.querySelector('input[name="type"]:checked').value;
+  function optionList(items, selected) { return items.map(([v, l]) => `<option value="${esc(v)}"${v === selected ? " selected" : ""}>${esc(l)}</option>`).join(""); }
+
+  function renderFormSelects() {
+    const cards = state.cards; // the form only uses real cards
+    const mSel = $("fMethod").value || state.lastMethod;
+    $("fMethod").innerHTML = optionList([["cash", "현금·계좌 (데빗 포함)"], ...cards.map((c) => [c.id, c.name])], mSel);
+    if (![...$("fMethod").options].some((o) => o.selected)) $("fMethod").value = "cash";
+    $("methodHelp").textContent = cards.length ? "" : "카드 탭에서 카드를 추가하면 여기서 고를 수 있어요.";
+    const pSel = $("fPayCard").value;
+    $("fPayCard").innerHTML = cards.length ? optionList(cards.map((c) => [c.id, c.name]), pSel) : `<option value="">카드를 먼저 추가하세요</option>`;
+    renderStmtSelect();
+    const mfSel = state.methodFilter;
+    $("methodFilter").innerHTML = optionList([["all", "모든 결제 수단"], ["cash", "현금·계좌"], ...allCards().map((c) => [c.id, c.name])], mfSel);
+    applyTypeVisibility();
+  }
+  function renderStmtSelect(force) {
+    const card = state.cards.find((c) => c.id === $("fPayCard").value);
+    if (!card) { $("fStmt").innerHTML = ""; return; }
+    const date = /^\d{4}-\d{2}-\d{2}$/.test($("fDate").value) ? $("fDate").value : TODAY;
+    const def = defaultStmtFor(card, date);
+    const sel = $("fStmt");
+    const cur = force || !sel.options.length || sel.dataset.card !== card.id ? def : sel.value;
+    sel.dataset.card = card.id;
+    const keys = [];
+    for (let i = -6; i <= 1; i++) keys.push(addMonths(def, i));
+    if (cur && !keys.includes(cur)) keys.push(cur);
+    $("fStmt").innerHTML = optionList([...keys.reverse().map((k) => { const l = stmtLabel(card, k); return [k, `${l.title} (${l.range})`]; }), ["", "명세서와 상관없음"]], cur);
+  }
+  function applyTypeVisibility() {
+    const t = typeVal();
+    $("catField").hidden = t === "payment";
+    $("payCardField").hidden = t !== "payment";
+    $("methodField").hidden = t !== "expense";
+    $("stmtField").hidden = t !== "payment" || !state.cards.length;
+    $("paymentNote").hidden = t !== "payment";
+  }
+  function fillCats(type, selected) {
+    if (type === "payment") return;
+    const list = CATS[type];
+    $("fCat").innerHTML = list.map((c) => `<option${c === selected ? " selected" : ""}>${esc(c)}</option>`).join("");
+    if (selected && !list.includes(selected)) $("fCat").insertAdjacentHTML("beforeend", `<option selected>${esc(selected)}</option>`);
+  }
+  const defaultDate = () => (state.month === CUR_MONTH ? TODAY : `${state.month}-01`);
+  function resetForm(keepType) {
+    state.editingId = null;
+    const t = keepType ? typeVal() : "expense";
+    $("t-" + t).checked = true;
+    if (t !== "payment") fillCats(t, keepType ? $("fCat").value : CATS[t][0]);
+    $("fAmount").value = ""; $("fMemo").value = ""; $("fDate").value = defaultDate();
+    $("fMethod").value = state.lastMethod;
+    $("formError").textContent = "";
+    $("submitBtn").textContent = "추가";
+    $("cancelEdit").hidden = true; $("deleteEdit").hidden = true; $("editingTag").hidden = true;
+    renderStmtSelect(true);
+    applyTypeVisibility();
+  }
+  function startEdit(id) {
+    const e = state.entries.find((x) => x.id === id);
+    if (!e) return;
+    if (state.view !== "ledger") { location.hash = "ledger"; state.view = "ledger"; }
+    state.editingId = id;
+    $("t-" + e.type).checked = true;
+    if (e.type !== "payment") fillCats(e.type, e.category);
+    $("fAmount").value = plainAmount(e.amount);
+    $("fDate").value = e.date;
+    $("fMemo").value = e.memo || "";
+    if (e.type === "expense") $("fMethod").value = e.method || "cash";
+    if (e.type === "payment") { $("fPayCard").value = e.card; renderStmtSelect(); $("fStmt").value = e.stmt || ""; }
+    $("formError").textContent = "";
+    $("submitBtn").textContent = "수정 저장";
+    $("cancelEdit").hidden = false; $("deleteEdit").hidden = false; $("editingTag").hidden = false;
+    if (!e.date.startsWith(state.month)) state.month = e.date.slice(0, 7);
+    render();
+    $("fAmount").focus();
+  }
+
+  form.addEventListener("change", (ev) => {
+    if (ev.target.name === "type") { fillCats(typeVal(), CATS[typeVal()] ? CATS[typeVal()][0] : ""); renderStmtSelect(true); applyTypeVisibility(); }
+    if (ev.target.id === "fPayCard") renderStmtSelect(true);
+    if (ev.target.id === "fDate" && typeVal() === "payment" && !state.editingId) renderStmtSelect(true);
+  });
+  function cleanTyping(el) { el.value = el.value.replace(isKRW() ? /[^\d,]/g : /[^\d.,]/g, ""); }
+  ["fAmount", "budgetInput", "cFixed", "cMin", "cStart"].forEach((id) => {
+    $(id).addEventListener("input", () => cleanTyping($(id)));
+    $(id).addEventListener("blur", () => { const n = parseAmount($(id).value); $(id).value = plainAmount(n); });
+  });
+  $("quick").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-add]"); if (!b) return;
+    const add = Number(b.dataset.add);
+    const n = add === 0 ? 0 : round2(parseAmount($("fAmount").value) + add);
+    $("fAmount").value = plainAmount(n);
+  });
+
+  form.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const err = (m, focusId) => { $("formError").textContent = m; if (focusId) $(focusId).focus(); };
+    const t = typeVal();
+    const amount = parseAmount($("fAmount").value);
+    const date = $("fDate").value;
+    if (!amount) return err("금액을 입력해 주세요.", "fAmount");
+    if (amount > 99999999999) return err("금액이 너무 커요.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return err("날짜를 골라 주세요.", "fDate");
+    if (!state.loaded) return err("기록을 불러오는 중이에요. 잠시 후 다시 눌러 주세요.");
+    if (t === "payment" && !state.cards.length) return err("카드 대금을 적으려면 카드 탭에서 카드를 먼저 추가해 주세요.");
+    const prev = state.editingId ? state.entries.find((x) => x.id === state.editingId) : null;
+    const entry = { id: state.editingId || newId("e"), date, type: t, amount, memo: $("fMemo").value.trim().slice(0, 80), createdAt: prev ? prev.createdAt : Date.now() };
+    if (t === "payment") { entry.card = $("fPayCard").value; entry.stmt = $("fStmt").value || ""; }
+    else { entry.category = $("fCat").value; entry.method = t === "expense" ? $("fMethod").value || "cash" : "cash"; }
+    if (t === "expense") state.lastMethod = entry.method;
+    const wasEdit = !!state.editingId;
+    try {
+      await putEntry(entry);
+      if (!date.startsWith(state.month)) state.month = date.slice(0, 7);
+      resetForm(true);
+      render();
+      const what = t === "income" ? "수입" : t === "payment" ? "카드 대금" : "지출";
+      toast(wasEdit ? "수정했어요" : `${what} ${money(amount)}을 기록했어요`);
+      $("fAmount").focus();
+    } catch (e2) { err(explain(e2)); }
+  });
+  $("cancelEdit").addEventListener("click", () => { resetForm(); render(); });
+  $("deleteEdit").addEventListener("click", () => { if (state.editingId) doDelete(state.editingId); });
+
+  async function doDelete(id) {
+    const e = state.entries.find((x) => x.id === id);
+    if (!e) return;
+    try {
+      await removeEntry(id);
+      if (state.editingId === id) resetForm();
+      render();
+      toast(`${money(e.amount)} 내역을 지웠어요`, "되돌리기", async () => { try { await putEntry(e); toast("되돌렸어요"); } catch (er) { toast(explain(er)); } });
+    } catch (er) { toast(explain(er)); }
+  }
+  function wireList(el) {
+    el.addEventListener("click", (ev) => {
+      const del = ev.target.closest("[data-del]");
+      if (del) { ev.stopPropagation(); doDelete(del.dataset.del); return; }
+      const row = ev.target.closest(".item[data-id]");
+      if (row) startEdit(row.dataset.id);
+    });
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      const row = ev.target.closest(".item[data-id]");
+      if (row && ev.target === row) { ev.preventDefault(); startEdit(row.dataset.id); }
+    });
+  }
+  wireList($("list"));
+  wireList($("cardDetail"));
+
+  // ---------- filters / nav ----------
+  $("typeChips").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-filter]"); if (!b) return;
+    state.filter = b.dataset.filter;
+    $("typeChips").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  });
+  $("methodFilter").addEventListener("change", (ev) => { state.methodFilter = ev.target.value; render(); });
+  let qTimer = null;
+  $("search").addEventListener("input", (ev) => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.query = ev.target.value; render(); }, 120); });
+  function setMonth(key) { state.month = key; if (!state.editingId) { $("fDate").value = defaultDate(); renderStmtSelect(true); } render(); }
+  $("prev").addEventListener("click", () => setMonth(addMonths(state.month, -1)));
+  $("next").addEventListener("click", () => setMonth(addMonths(state.month, 1)));
+  $("today").addEventListener("click", () => setMonth(CUR_MONTH));
+  function route() { state.view = location.hash === "#cards" ? "cards" : "ledger"; render(); }
+  window.addEventListener("hashchange", route);
+
+  $("currency").addEventListener("change", async (ev) => {
+    state.currency = ev.target.value;
+    $("quick").dataset.cur = "";
+    try { await putSettings(); } catch (e) { toast(explain(e)); }
+  });
+
+  // ---------- budget ----------
+  $("budgetEditBtn").addEventListener("click", () => { $("budgetView").hidden = true; $("budgetForm").hidden = false; $("budgetInput").value = plainAmount(state.budget); $("budgetInput").focus(); });
+  $("budgetCancel").addEventListener("click", () => { $("budgetForm").hidden = true; $("budgetView").hidden = false; });
+  $("budgetForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const b = parseAmount($("budgetInput").value);
+    $("budgetForm").hidden = true; $("budgetView").hidden = false;
+    if (b === state.budget) return;
+    state.budget = b;
+    try { await putSettings(); toast(b ? `월 예산을 ${money(b)}으로 정했어요` : "월 예산을 지웠어요"); } catch (e) { toast(explain(e)); }
+  });
+
+  // ---------- CSV ----------
+  $("copyCsv").addEventListener("click", async () => {
+    const rows = monthEntries().slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    const q = (s) => `"${String(s ?? "").replace(/"/g, '""')}"`;
+    const typeK = { expense: "지출", income: "수입", payment: "카드 대금" };
+    const csv = ["날짜,구분,분류,결제수단/카드,금액,메모", ...rows.map((e) => [e.date, typeK[e.type], q(e.type === "payment" ? "" : e.category), q(e.type === "payment" ? methodName(e.card) : methodName(e.method)), e.amount, q(e.memo)].join(","))].join("\n");
+    try { await navigator.clipboard.writeText(csv); toast(`${rows.length}건을 CSV로 복사했어요. 엑셀이나 시트에 붙여넣으세요`); }
+    catch (e) { toast("복사하지 못했어요. 브라우저가 클립보드 사용을 막았어요"); }
+  });
+
+  // ---------- render: cards ----------
+  function cardSummaryLines(card, p) {
+    if (card.kind === "full") {
+      const lastL = stmtLabel(card, p.lastStmt);
+      const diff = round2(p.lastPaid - p.lastCharged);
+      let line;
+      if (!p.lastPaid) line = `<span class="line">${esc(lastL.title)} 기록 ${money(p.lastCharged)} · 아직 납부 기록 없음</span>`;
+      else if (Math.abs(diff) < 0.005) line = `<span class="line good">${esc(lastL.title)} 납부액과 기록이 딱 맞아요</span>`;
+      else if (diff > 0) line = `<span class="line alert">${esc(lastL.title)} ${money(diff)} 아직 기록 안 됨</span>`;
+      else line = `<span class="line">${esc(lastL.title)} 기록이 납부액보다 ${money(-diff)} 많아요</span>`;
+      return `<span class="big num">${money(p.openCharged)}</span><span class="line">이번 명세서에 지금까지 쓴 돈</span>${line}`;
+    }
+    if (card.kind === "fixed") {
+      const info = card.fixedPayment ? (p.months ? `매월 ${money(card.fixedPayment)} · 약 ${p.months}번 남음 → ${monthName(p.payoff)} 완납 예상` : "다 갚았어요") : "고정 상환액을 정해 주세요";
+      return `<span class="big num">${money(p.bal)}</span><span class="line">남은 잔액 · ${info}</span><span class="line${p.paidNow ? " good" : ""}">이번 달 납부 ${p.paidNow ? money(p.paidNow) + " 완료" : "아직 안 함"}</span>`;
+    }
+    let promo = "";
+    if (card.promoEnd) {
+      if (p.promoPassed) promo = `<span class="line alert">무이자 기간이 끝났어요 (${md(card.promoEnd)})</span>`;
+      else if (p.needed > (card.minPayment || 0)) promo = `<span class="line alert">무이자 끝나기 전 완납하려면 매월 ${money(p.needed)}</span>`;
+      else promo = `<span class="line good">최소 금액만 내도 무이자 기간 안에 끝나요</span>`;
+    }
+    return `<span class="big num">${money(p.bal)}</span><span class="line">이월 잔액 · 최소 ${money(card.minPayment || 0)}</span>${promo}`;
+  }
+
+  function renderCards() {
+    const cards = allCards();
+    if (!cards.length) {
+      $("cardList").innerHTML = `<p class="empty">아직 카드가 없어요. 아래에서 쓰고 있는 카드를 추가해 주세요.</p>`;
+    } else {
+      $("cardList").innerHTML = cards.map((c) => {
+        const p = cardPlan(c);
+        return `<button type="button" class="ccard" data-kind="${c.kind}" data-card="${esc(c.id)}" aria-pressed="${state.selectedCard === c.id}">
+          <span class="top"><span class="nm">${esc(c.name)}</span><span class="pill" data-kind="${c.kind}">${KIND[c.kind].label}</span></span>
+          ${cardSummaryLines(c, p)}</button>`;
+      }).join("");
+    }
+    if (!cards.some((c) => c.id === state.selectedCard)) { state.selectedCard = cards.length ? cards[0].id : null; state.stmtKey = null; }
+    if (cards.length) $("cardList").querySelectorAll(".ccard").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.card === state.selectedCard)));
+    $("addCardBtn").hidden = !$("cardFormCard").hidden;
+    renderCardDetail();
+  }
+
+  function renderCardDetail() {
+    const card = cardById(state.selectedCard);
+    const el = $("cardDetail");
+    if (!card) {
+      el.innerHTML = `<h2>카드 상세</h2><p class="empty">카드를 추가하면 여기에서 명세서별 사용 내역과 상환 계획을 볼 수 있어요.</p>`;
+      return;
+    }
+    const p = cardPlan(card);
+    if (!state.stmtKey) state.stmtKey = card.kind === "full" ? p.lastStmt : stmtOf(card, TODAY);
+    const key = state.stmtKey;
+    const L = stmtLabel(card, key);
+    const charges = chargesOf(card.id).filter((e) => stmtOf(card, e.date) === key).sort((a, b) => (a.date < b.date ? 1 : -1));
+    const charged = sum(charges);
+    const paysForStmt = paymentsOf(card.id).filter((e) => e.stmt === key);
+    const paidForStmt = sum(paysForStmt);
+    const closeTxt = card.closingDay ? `매월 ${card.closingDay}일 마감` : "매월 말일 마감";
+    const dueTxt = card.dueDay ? ` · ${card.dueDay}일 납부` : "";
+
+    let plan = "";
+    if (card.kind === "fixed") {
+      plan = `<div class="stats">
+        <div class="stat"><span class="k">남은 잔액</span><span class="v num">${money(p.bal)}</span></div>
+        <div class="stat"><span class="k">매월 상환</span><span class="v num">${card.fixedPayment ? money(card.fixedPayment) : "미설정"}</span></div>
+        <div class="stat good"><span class="k">완납 예상</span><span class="v">${p.months ? monthName(p.payoff) : p.bal <= 0 ? "완납" : "—"}</span></div></div>
+        <div class="callout${p.paidNow ? "" : " warn"}">${p.paidNow ? `이번 달 ${money(p.paidNow)} 냈어요.` : `이번 달 상환 기록이 아직 없어요${card.dueDay ? ` (${card.dueDay}일 납부)` : ""}.`} ${p.months ? `이대로 매달 ${money(card.fixedPayment)}씩이면 ${p.months}번 더 내면 끝나요.` : ""}</div>`;
+    } else if (card.kind === "minimum") {
+      let call = "";
+      if (!card.promoEnd) call = `<div class="callout">무이자 끝나는 날을 입력하면, 그 전에 다 갚으려면 매달 얼마가 필요한지 계산해 드려요.</div>`;
+      else if (p.promoPassed) call = `<div class="callout alert">무이자 기간이 ${card.promoEnd}에 끝났어요. 남은 ${money(p.bal)}에 이자가 붙을 수 있어요.</div>`;
+      else if (p.needed > (card.minPayment || 0)) call = `<div class="callout alert">무이자가 끝나는 ${card.promoEnd}까지 약 ${p.monthsLeft}번 남았어요. 최소 금액 ${money(card.minPayment || 0)}만 내면 그때 잔액이 남아요. 다 갚으려면 매달 <strong class="num">${money(p.needed)}</strong>씩 내야 해요.</div>`;
+      else call = `<div class="callout">무이자 기간(${card.promoEnd}까지) 안에 최소 금액만으로도 다 갚을 수 있어요.</div>`;
+      plan = `<div class="stats">
+        <div class="stat"><span class="k">이월 잔액</span><span class="v num">${money(p.bal)}</span></div>
+        <div class="stat"><span class="k">최소 납부액</span><span class="v num">${money(card.minPayment || 0)}</span></div>
+        <div class="stat${p.promoPassed || (p.daysToPromo != null && p.daysToPromo < 90) ? " alert" : ""}"><span class="k">무이자 남은 기간</span><span class="v">${card.promoEnd ? (p.promoPassed ? "종료" : `${p.daysToPromo}일`) : "—"}</span></div></div>${call}`;
+    }
+
+    let recon = "";
+    if (card.kind === "full") {
+      const diff = round2(paidForStmt - charged);
+      let msg;
+      if (!paidForStmt) msg = `<div class="callout">${L.closed ? "이 명세서에 대한 납부 기록이 아직 없어요. 카드 대금을 내면 가계부 탭에서 '카드 대금'으로 적어 주세요." : "아직 마감 전인 명세서예요. 마감 후 대금을 내면 기록과 맞춰 볼 수 있어요."}</div>`;
+      else if (Math.abs(diff) < 0.005) msg = `<div class="callout">낸 돈 ${money(paidForStmt)}의 사용 내역이 전부 기록됐어요.</div>`;
+      else if (diff > 0) msg = `<div class="callout alert">낸 돈 ${money(paidForStmt)} 중 <strong class="num">${money(diff)}</strong>는 아직 어디에 썼는지 기록되지 않았어요. 카드 명세서를 보며 빠진 내역을 추가해 보세요.</div>`;
+      else msg = `<div class="callout warn">기록한 사용(${money(charged)})이 낸 돈보다 ${money(-diff)} 많아요. 환불·크레딧이 있었거나, 다른 명세서의 내역이 섞였을 수 있어요.</div>`;
+      recon = `<div class="stats">
+        <div class="stat"><span class="k">기록한 사용</span><span class="v num">${money(charged)}</span></div>
+        <div class="stat"><span class="k">이 명세서에 낸 돈</span><span class="v num">${money(paidForStmt)}</span></div>
+        <div class="stat${paidForStmt && diff > 0.005 ? " alert" : ""}"><span class="k">기록 안 된 금액</span><span class="v num">${paidForStmt ? money(Math.max(0, diff)) : "—"}</span></div></div>${msg}`;
+    } else {
+      recon = `<div class="stats"><div class="stat"><span class="k">이 기간 사용</span><span class="v num">${money(charged)}</span></div><div class="stat"><span class="k">사용 건수</span><span class="v num">${charges.length}건</span></div><div class="stat"><span class="k">이 명세서에 낸 돈</span><span class="v num">${money(paidForStmt)}</span></div></div>`;
+    }
+    const catRows = groupSum(charges, (e) => e.category || "기타");
+    const recentPays = paymentsOf(card.id).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 6);
+
+    el.innerHTML = `
+      <div class="detail-head"><h2>${esc(card.name)}</h2>
+        <span class="actions"><span class="pill" data-kind="${card.kind}">${KIND[card.kind].label}</span>${card.id.startsWith("exc") ? "" : `<button class="textbtn" type="button" data-editcard="${esc(card.id)}">카드 설정 편집</button>`}</span></div>
+      <p class="note" style="margin:0">${closeTxt}${dueTxt}</p>
+      ${plan}
+      <h2>명세서별 사용 내역</h2>
+      <div class="stmtnav">
+        <button class="iconbtn" type="button" data-stmt="-1" aria-label="이전 명세서">‹</button>
+        <span><span class="label">${esc(L.title)}</span> <span class="range num">${L.range}${L.closed ? "" : " · 진행 중"}</span></span>
+        <button class="iconbtn" type="button" data-stmt="1" aria-label="다음 명세서">›</button>
+      </div>
+      ${recon}
+      <div class="cats">${barRows(catRows, charged, "이 명세서 기간에 기록된 사용이 없어요.")}</div>
+      <div>${charges.length ? charges.map((e) => entryRow(e, { showDate: true })).join("") : ""}</div>
+      ${card.id.startsWith("exc") ? "" : `<div class="actions"><button class="textbtn" type="button" data-addcharge="${esc(card.id)}">+ 이 명세서에 사용 내역 추가</button><button class="textbtn" type="button" data-addpay="${esc(card.id)}">+ 이 명세서 대금 납부 기록</button></div>`}
+      <h2>최근 납부 기록</h2>
+      <div class="paylist">${recentPays.length ? recentPays.map((e) => `<div><span>${e.date}${e.stmt ? ` · ${esc(stmtLabel(card, e.stmt).title)}` : ""}</span><span class="num">${money(e.amount)}</span></div>`).join("") : `<p class="empty">납부 기록이 없어요.</p>`}</div>`;
+  }
+
+  $("cardList").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-card]"); if (!b) return;
+    state.selectedCard = b.dataset.card; state.stmtKey = null; render();
+  });
+  $("cardDetail").addEventListener("click", (ev) => {
+    const s = ev.target.closest("[data-stmt]");
+    if (s) { state.stmtKey = addMonths(state.stmtKey, Number(s.dataset.stmt)); renderCardDetail(); return; }
+    const ec = ev.target.closest("[data-editcard]");
+    if (ec) { openCardForm(ec.dataset.editcard); return; }
+    const ac = ev.target.closest("[data-addcharge]");
+    if (ac) { prefillFromCard("expense", ac.dataset.addcharge); return; }
+    const ap = ev.target.closest("[data-addpay]");
+    if (ap) { prefillFromCard("payment", ap.dataset.addpay); }
+  });
+  function prefillFromCard(type, cardId) {
+    const card = state.cards.find((c) => c.id === cardId); if (!card) return;
+    const key = state.stmtKey;
+    const [s, e] = stmtRange(card, key);
+    location.hash = "ledger"; state.view = "ledger";
+    resetForm();
+    $("t-" + type).checked = true;
+    if (type === "expense") {
+      fillCats("expense", CATS.expense[0]);
+      state.lastMethod = cardId;
+      $("fDate").value = TODAY >= s && TODAY <= e ? TODAY : e;
+    } else {
+      $("fDate").value = TODAY;
+    }
+    state.month = $("fDate").value.slice(0, 7);
+    render();
+    $("fMethod").value = cardId;
+    if (type === "payment") { $("fPayCard").value = cardId; renderStmtSelect(); $("fStmt").value = key; }
+    applyTypeVisibility();
+    $("fAmount").focus();
+  }
+
+  // ---------- card form ----------
+  const dayOpts = (zeroLabel) => [[0, zeroLabel], ...Array.from({ length: 31 }, (_, i) => [i + 1, `매월 ${i + 1}일`])].map(([v, l]) => `<option value="${v}">${l}</option>`).join("");
+  $("cClose").innerHTML = dayOpts("매월 말일");
+  $("cDue").innerHTML = dayOpts("정하지 않음");
+  const kindVal = () => document.querySelector('input[name="kind"]:checked').value;
+  function applyKind() {
+    const k = kindVal();
+    $("kindHelp").textContent = KIND[k].help;
+    $("cFixedField").hidden = k !== "fixed";
+    $("cMinFields").hidden = k !== "minimum";
+    $("cStartFields").hidden = k === "full";
+    $("cStartNote").hidden = k === "full";
+  }
+  $("cardForm").addEventListener("change", (ev) => { if (ev.target.name === "kind") applyKind(); });
+  function openCardForm(id) {
+    const c = id ? state.cards.find((x) => x.id === id) : null;
+    state.editingCard = c ? c.id : null;
+    $("cardFormTitle").textContent = c ? "카드 설정 편집" : "카드 추가";
+    $("cName").value = c ? c.name : "";
+    $("k-" + (c ? c.kind : "full")).checked = true;
+    $("cClose").value = String(c ? c.closingDay || 0 : 0);
+    $("cDue").value = String(c ? c.dueDay || 0 : 0);
+    $("cFixed").value = plainAmount(c && c.fixedPayment);
+    $("cMin").value = plainAmount(c && c.minPayment);
+    $("cPromo").value = (c && c.promoEnd) || "";
+    $("cStart").value = plainAmount(c && c.startBalance);
+    $("cStartDate").value = (c && c.startDate) || TODAY;
+    $("cardError").textContent = "";
+    $("cardDelete").hidden = !c;
+    $("cardFormCard").hidden = false;
+    applyKind();
+    render();
+    $("cName").focus();
+  }
+  function closeCardForm() { $("cardFormCard").hidden = true; state.editingCard = null; render(); }
+  $("addCardBtn").addEventListener("click", () => openCardForm(null));
+  $("cardCancel").addEventListener("click", closeCardForm);
+  $("cardForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const err = (m, f) => { $("cardError").textContent = m; if (f) $(f).focus(); };
+    const name = $("cName").value.trim();
+    if (!name) return err("카드 이름을 입력해 주세요.", "cName");
+    if (!state.loaded) return err("기록을 불러오는 중이에요. 잠시 후 다시 눌러 주세요.");
+    const kind = kindVal();
+    const card = { id: state.editingCard || newId("c"), name: name.slice(0, 40), kind, closingDay: Number($("cClose").value) || 0, dueDay: Number($("cDue").value) || 0 };
+    if (kind === "fixed") { card.fixedPayment = parseAmount($("cFixed").value); if (!card.fixedPayment) return err("매월 갚는 고정 금액을 입력해 주세요.", "cFixed"); }
+    if (kind === "minimum") { card.minPayment = parseAmount($("cMin").value); card.promoEnd = $("cPromo").value || ""; }
+    if (kind !== "full") { card.startBalance = parseAmount($("cStart").value); card.startDate = $("cStartDate").value || TODAY; }
+    else { card.startBalance = 0; card.startDate = ""; }
+    const prevCards = state.cards.slice();
+    const i = state.cards.findIndex((c) => c.id === card.id);
+    state.cards = i >= 0 ? state.cards.map((c) => (c.id === card.id ? card : c)) : [...state.cards, card];
+    try {
+      await putSettings();
+      state.selectedCard = card.id; state.stmtKey = null;
+      $("cardFormCard").hidden = true; state.editingCard = null;
+      render();
+      toast(i >= 0 ? "카드 설정을 바꿨어요" : `${card.name}을(를) 추가했어요`);
+    } catch (e) { state.cards = prevCards; render(); err(explain(e)); }
+  });
+  $("cardDelete").addEventListener("click", async () => {
+    const id = state.editingCard; if (!id) return;
+    const card = state.cards.find((c) => c.id === id);
+    const used = state.entries.filter((e) => e.method === id || e.card === id).length;
+    const prevCards = state.cards.slice();
+    state.cards = state.cards.filter((c) => c.id !== id);
+    try {
+      await putSettings();
+      $("cardFormCard").hidden = true; state.editingCard = null; render();
+      toast(`${card.name} 카드를 지웠어요${used ? ` · 내역 ${used}건은 '삭제된 카드'로 남아요` : ""}`, "되돌리기", async () => {
+        state.cards = [...state.cards, card]; try { await putSettings(); } catch (e) { toast(explain(e)); }
+      });
+    } catch (e) { state.cards = prevCards; render(); toast(explain(e)); }
+  });
+
+  // ---------- start ----------
+  fillCats("expense", CATS.expense[0]);
+  $("fDate").value = defaultDate();
+  route();
+  useLocal("이 기기에 저장됨 · 로그인 필요 없음");
+
+  // ---------- standalone app: backup, offline ----------
+  const BK_KEY = "monthly-ledger-last-backup";
+  function showBackupDate() {
+    let d = null; try { d = localStorage.getItem(BK_KEY); } catch (e) {}
+    $("backupSub").textContent = d ? `마지막 백업 ${d}` : "아직 백업한 적 없음";
+  }
+  showBackupDate();
+  $("backupSave").addEventListener("click", async () => {
+    const body = JSON.stringify({ app: "monthly-ledger", version: 2, exportedAt: new Date().toISOString(), entries: state.entries, settings: settingsBody() }, null, 1);
+    const name = `가계부-백업-${TODAY}.json`;
+    const file = new File([body], name, { type: "application/json" });
+    const mark = () => { try { localStorage.setItem(BK_KEY, TODAY); } catch (e) {} showBackupDate(); };
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: name });
+        mark(); toast("백업 파일을 보냈어요. 파일 앱이나 메일에 보관해 두세요"); return;
+      }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    mark(); toast(`${name} 파일을 저장했어요`);
+  });
+  $("backupLoadBtn").addEventListener("click", () => $("backupFile").click());
+  $("backupFile").addEventListener("change", async (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (!f) return;
+    let data;
+    try { data = JSON.parse(await f.text()); } catch (e) { toast("백업 파일을 읽지 못했어요. 가계부에서 저장한 .json 파일인지 확인해 주세요"); return; }
+    if (!data || data.app !== "monthly-ledger" || !Array.isArray(data.entries)) { toast("가계부 백업 파일이 아니에요"); return; }
+    const msg = `백업 파일의 내역 ${data.entries.length}건, 카드 ${(data.settings && data.settings.cards || []).length}장으로 지금 기록을 바꿀까요?\n지금 이 기기에 있는 내역 ${state.entries.length}건은 지워져요.`;
+    if (!window.confirm(msg)) return;
+    state.entries = data.entries.filter((e) => e && e.id && e.date && e.type);
+    applySettings(data.settings);
+    saveLocal();
+    resetForm();
+    render();
+    toast(`내역 ${state.entries.length}건을 불러왔어요`);
+  });
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+})();
+</script>
+</body>
+</html>
