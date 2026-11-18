@@ -185,6 +185,7 @@ form.entry, form.cardform { display: grid; gap: 12px; }
 .ccard[data-kind="full"]::before { background: var(--accent); }
 .ccard[data-kind="fixed"]::before { background: var(--income); }
 .ccard[data-kind="minimum"]::before { background: var(--warn); }
+.ccard[data-kind="random"]::before { background: var(--expense); }
 .ccard[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .ccard .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .ccard .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -196,6 +197,7 @@ form.entry, form.cardform { display: grid; gap: 12px; }
 .pill[data-kind="full"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
 .pill[data-kind="fixed"] { color: var(--income); border-color: color-mix(in srgb, var(--income) 40%, var(--line)); }
 .pill[data-kind="minimum"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.pill[data-kind="random"] { color: var(--expense); border-color: color-mix(in srgb, var(--expense) 40%, var(--line)); }
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .stat { background: var(--bg); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
 .stat .k { font-size: 12.5px; color: var(--muted); }
@@ -410,6 +412,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
               <input type="radio" name="kind" id="k-full" value="full" checked><label for="k-full">매월 전액</label>
               <input type="radio" name="kind" id="k-fixed" value="fixed"><label for="k-fixed">고정 금액</label>
               <input type="radio" name="kind" id="k-minimum" value="minimum"><label for="k-minimum">최소 금액·이월</label>
+              <input type="radio" name="kind" id="k-random" value="random"><label for="k-random">랜덤</label>
             </div>
             <span class="help" id="kindHelp"></span>
           </div>
@@ -530,6 +533,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     full: { label: "매월 전액", help: "매달 명세서 금액을 전부 갚아요. 낸 금액과 기록한 사용 내역을 명세서별로 맞춰 볼 수 있어요." },
     fixed: { label: "고정 금액", help: "매달 정해진 금액씩 갚아요. 남은 잔액과 완납 예상 시점을 보여 드려요." },
     minimum: { label: "최소 금액·이월", help: "최소 금액만 내고 나머지는 이월해요. 무이자가 끝나기 전에 다 갚으려면 매달 얼마가 필요한지 알려 드려요." },
+    random: { label: "랜덤", help: "정해진 금액 없이 그때그때 원하는 만큼 갚아요. 남은 잔액과 최근 납부, 지금 속도로 언제쯤 다 갚을지 보여 드려요." },
   };
   const DOW = ["일", "월", "화", "수", "목", "금", "토"];
   const $ = (id) => document.getElementById(id);
@@ -647,7 +651,8 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     const pay = sum(paymentsOf(card.id).filter((e) => e.date >= from));
     return round2((Number(card.startBalance) || 0) + ch - pay);
   }
-  const paidInMonth = (card, key) => sum(paymentsOf(card.id).filter((e) => e.date.startsWith(key)));
+  const monthDiff = (a, b) => { const [ay, am] = a.split("-").map(Number), [by, bm] = b.split("-").map(Number); return (by - ay) * 12 + (bm - am); };
+  const paidInMonth = (card, key) =>sum(paymentsOf(card.id).filter((e) => e.date.startsWith(key)));
 
   function cardPlan(card) {
     const bal = cardBalance(card);
@@ -668,6 +673,17 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
         plan.needed = bal > 0 ? round2(bal / plan.monthsLeft) : 0;
         plan.daysToPromo = Math.round((new Date(card.promoEnd + "T00:00:00") - new Date(TODAY + "T00:00:00")) / 86400000);
       }
+    }
+    if (card.kind === "random") {
+      const pays = paymentsOf(card.id).filter((e) => !card.startDate || e.date >= card.startDate).sort((a, b) => (a.date < b.date ? 1 : -1));
+      plan.lastPay = pays[0] || null;
+      // 최근 3개월(기록 시작 이후만) 평균 상환액으로 완납 시점을 가늠한다
+      let from = addMonths(CUR_MONTH, -2);
+      if (card.startDate && card.startDate.slice(0, 7) > from) from = card.startDate.slice(0, 7);
+      const span = Math.max(1, monthDiff(from, CUR_MONTH) + 1);
+      plan.avg = round2(sum(pays.filter((e) => e.date.slice(0, 7) >= from)) / span);
+      plan.avgSpan = span;
+      if (plan.avg > 0 && bal > 0) { plan.months = Math.ceil(bal / plan.avg - 1e-9); plan.payoff = addMonths(CUR_MONTH, plan.months); }
     }
     if (card.kind === "full") {
       const last = defaultStmtFor(card, TODAY);
@@ -1153,6 +1169,11 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
       const info = card.fixedPayment ? (p.months ? `매월 ${money(card.fixedPayment)} · 약 ${p.months}번 남음 → ${monthName(p.payoff)} 완납 예상` : "다 갚았어요") : "고정 상환액을 정해 주세요";
       return `<span class="big num">${money(p.bal)}</span><span class="line">남은 잔액 · ${info}</span><span class="line${p.paidNow ? " good" : ""}">이번 달 납부 ${p.paidNow ? money(p.paidNow) + " 완료" : "아직 안 함"}</span>`;
     }
+    if (card.kind === "random") {
+      const last = p.lastPay ? `최근 납부 ${md(p.lastPay.date)} · ${money(p.lastPay.amount)}` : "아직 납부 기록 없음";
+      const pace = p.months ? `<span class="line">이 속도면 약 ${p.months}개월 뒤 완납</span>` : "";
+      return `<span class="big num">${money(p.bal)}</span><span class="line">남은 잔액 · ${last}</span>${pace}`;
+    }
     let promo = "";
     if (card.promoEnd) {
       if (p.promoPassed) promo = `<span class="line alert">무이자 기간이 끝났어요 (${md(card.promoEnd)})</span>`;
@@ -1215,6 +1236,15 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
         <div class="stat"><span class="k">이월 잔액</span><span class="v num">${money(p.bal)}</span></div>
         <div class="stat"><span class="k">최소 납부액</span><span class="v num">${money(card.minPayment || 0)}</span></div>
         <div class="stat${p.promoPassed || (p.daysToPromo != null && p.daysToPromo < 90) ? " alert" : ""}"><span class="k">무이자 남은 기간</span><span class="v">${card.promoEnd ? (p.promoPassed ? "종료" : `${p.daysToPromo}일`) : "—"}</span></div></div>${call}`;
+    } else if (card.kind === "random") {
+      let call;
+      if (p.bal <= 0) call = `<div class="callout">남은 잔액이 없어요.</div>`;
+      else if (p.avg > 0) call = `<div class="callout">최근 ${p.avgSpan}개월 동안 한 달에 평균 <strong class="num">${money(p.avg)}</strong>씩 갚았어요. 이 속도면 약 ${p.months}개월 뒤(${monthName(p.payoff)}) 다 갚아요.</div>`;
+      else call = `<div class="callout warn">최근 3개월 동안 납부 기록이 없어요. 갚을 때마다 가계부 탭에서 '카드 대금'으로 적어 주세요.</div>`;
+      plan = `<div class="stats">
+        <div class="stat"><span class="k">남은 잔액</span><span class="v num">${money(p.bal)}</span></div>
+        <div class="stat"><span class="k">이번 달 낸 돈</span><span class="v num">${money(p.paidNow)}</span></div>
+        <div class="stat"><span class="k">최근 납부</span><span class="v">${p.lastPay ? md(p.lastPay.date) : "—"}</span></div></div>${call}`;
     }
 
     let recon = "";
