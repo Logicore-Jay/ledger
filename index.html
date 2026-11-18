@@ -144,6 +144,18 @@ form.entry, form.cardform { display: grid; gap: 12px; }
 .cat .bar { height: 8px; background: var(--accent-soft); border-radius: 4px; overflow: hidden; }
 .cat .bar span { display: block; height: 100%; background: var(--expense); opacity: .85; border-radius: 4px; }
 .cat .amt { text-align: right; white-space: nowrap; }
+.people { display: grid; gap: 12px; }
+.person { display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; font-size: 14px; }
+.person .who { font-weight: 600; }
+.person .bar { height: 10px; background: var(--accent-soft); border-radius: 5px; overflow: hidden; position: relative; }
+.person .bar span { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
+.person .bar i { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: .45; border-radius: 1px; }
+.person .amt { text-align: right; white-space: nowrap; display: grid; }
+.person .amt b { font-weight: 600; }
+.person .amt small { font-size: 12px; color: var(--muted); }
+.delta.up { color: var(--expense); }
+.delta.down { color: var(--accent); }
+.people-total { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 10px; font-size: 13.5px; }
 .cat .amt em { font-style: normal; color: var(--muted); font-size: 12px; margin-left: 6px; display: inline-block; min-width: 34px; }
 .empty { color: var(--muted); font-size: 14px; padding: 6px 0; margin: 0; }
 
@@ -358,6 +370,12 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
           <div class="cats" id="cats"></div>
         </section>
 
+        <section class="card" aria-labelledby="shopTitle">
+          <h2 id="shopTitle">사람별 쇼핑 <span class="sub" id="shopSub"></span></h2>
+          <div class="people" id="people"></div>
+          <div class="legend"><span><i style="background:var(--accent)"></i>이번 달</span><span><i style="background:var(--ink);opacity:.45;width:3px"></i>지난달 위치</span></div>
+        </section>
+
         <section class="card" aria-labelledby="methodTitle">
           <h2 id="methodTitle">결제 수단별 지출</h2>
           <div class="cats" id="methods"></div>
@@ -526,7 +544,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
 (() => {
   "use strict";
   const CATS = {
-    expense: ["장보기", "외식", "카페·간식", "교통·주유", "주거", "공과금·통신", "쇼핑", "생활용품", "의료", "문화·여가", "구독", "교육", "경조사·선물", "보험", "여행", "기타"],
+    expense: [], // 아래 EXPENSE_GROUPS에서 채운다
     income: ["급여", "부수입", "환급·이자", "용돈", "기타"],
   };
   const KIND = {
@@ -535,6 +553,22 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     minimum: { label: "최소·이월", help: "최소 금액만 내고 나머지는 이월해요. 무이자가 끝나기 전에 다 갚으려면 매달 얼마가 필요한지 알려 드려요." },
     random: { label: "랜덤", help: "정해진 금액 없이 그때그때 원하는 만큼 갚아요. 남은 잔액과 최근 납부, 지금 속도로 언제쯤 다 갚을지 보여 드려요." },
   };
+  // 지출 분류: 묶음별로 고르기 쉽게 (고정 지출 → 생활비 → 가족 → 여가·기타)
+  const EXPENSE_GROUPS = [
+    ["고정 지출", ["렌트", "공과금", "보험", "구독"]],
+    ["생활비", ["마트 장보기", "외식", "생활 용품", "교통·주유"]],
+    ["가족", ["시완이 교육", "의료", "쇼핑 (승재)", "쇼핑 (지원)", "쇼핑 (시완)"]],
+    ["여가·기타", ["문화·여가", "여행", "경조사·선물", "기타"]],
+  ];
+  CATS.expense = EXPENSE_GROUPS.flatMap((g) => g[1]);
+  const firstCat = (type) => (type === "expense" ? "마트 장보기" : CATS[type] ? CATS[type][0] : "");
+  // 예전 분류 이름 → 새 이름 ('쇼핑'은 누구 것인지 몰라서 그대로 둔다)
+  const OLD_CATS = { "장보기": "마트 장보기", "카페·간식": "외식", "주거": "렌트", "공과금·통신": "공과금", "생활용품": "생활 용품", "교육": "시완이 교육" };
+  function migrateCats(list) {
+    let n = 0;
+    for (const e of list) if (e && e.type === "expense" && OLD_CATS[e.category]) { e.category = OLD_CATS[e.category]; n++; }
+    return n;
+  }
   const DOW = ["일", "월", "화", "수", "목", "금", "토"];
   const $ = (id) => document.getElementById(id);
   const pad = (n) => String(n).padStart(2, "0");
@@ -594,7 +628,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
       // 지난달 주 카드 사용 (지난달 명세서)
       [P, 2, "expense", "장보기", 142.36, "Costco", "exc1"], [P, 4, "expense", "외식", 58.4, "가족 저녁", "exc1"],
       [P, 6, "expense", "교통·주유", 52.1, "주유", "exc1"], [P, 9, "expense", "구독", 15.49, "넷플릭스", "exc1"],
-      [P, 12, "expense", "쇼핑", 89.99, "아마존 겨울 재킷", "exc1"], [P, 15, "expense", "장보기", 96.2, "H Mart", "exc1"],
+      [P, 12, "expense", "쇼핑 (승재)", 89.99, "아마존 겨울 재킷", "exc1"], [P, 15, "expense", "장보기", 96.2, "H Mart", "exc1"],
       [P, 18, "expense", "공과금·통신", 85, "휴대폰 요금", "exc1"], [P, 21, "expense", "카페·간식", 23.75, "커피 3번", "exc1"],
       [P, 24, "expense", "의료", 40, "진료 코페이", "exc1"], [P, 27, "expense", "장보기", 118.55, "Trader Joe's", "exc1"],
       [P, 29, "expense", "교통·주유", 48.3, "주유", "exc1"], [P, 30, "expense", "외식", 62.15, "점심 모임", "exc1"],
@@ -609,6 +643,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
       [C, 16, "expense", "장보기", 104.25, "H Mart", "exc1"], [C, 17, "expense", "카페·간식", 12.5, "베이커리", "exc1"],
     ];
     return raw.map((r, i) => {
+      if (OLD_CATS[r[3]]) r[3] = OLD_CATS[r[3]];
       const date = `${r[0]}-${pad(Math.min(r[1], daysIn(r[0])))}`;
       const e = { id: "ex" + i, example: true, date, type: r[2], amount: r[4], memo: r[5], createdAt: i };
       if (r[2] === "payment") { e.card = r[6]; e.stmt = r[7] || ""; }
@@ -717,6 +752,8 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
       setStatus("local", reason || "이 브라우저에만 저장돼요");
     } catch (e) { setStatus("err", "저장할 수 없어요. 새로고침하면 기록이 사라집니다"); }
     state.loaded = true;
+    // 분류 이름이 바뀐 기록은 새 이름으로 고쳐 저장한다 (보기 전용 기기는 컴퓨터 쪽을 따른다)
+    if (migrateCats(state.entries) && !(typeof sync !== "undefined" && sync.role === "viewer")) saveLocal();
     render();
   }
   function saveLocal() {
@@ -835,6 +872,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     renderBudget(exp);
     renderCats(list, exp);
     renderMethods(list, exp);
+    renderShopping(list);
     renderChart(list);
     renderList(list);
   }
@@ -882,6 +920,26 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     $("catSub").textContent = rows.length ? `${rows.length}개 분류` : "";
     $("cats").innerHTML = barRows(rows, exp, "이 달의 지출이 아직 없어요.");
   }
+  // 사람별 쇼핑: 이번 달 막대 + 지난달 위치 표시 + 증감
+  const SHOPPERS = [["승재", "쇼핑 (승재)"], ["지원", "쇼핑 (지원)"], ["시완", "쇼핑 (시완)"]];
+  function renderShopping(list) {
+    const prevKey = addMonths(state.month, -1);
+    const prevList = allEntries().filter((e) => typeof e.date === "string" && e.date.startsWith(prevKey));
+    const total = (arr, cat) => sum(arr.filter((e) => e.type === "expense" && e.category === cat));
+    const rows = SHOPPERS.map(([who, cat]) => ({ who, now: total(list, cat), prev: total(prevList, cat) }));
+    const max = Math.max(1, ...rows.map((r) => Math.max(r.now, r.prev)));
+    const sumNow = round2(rows.reduce((a, r) => a + r.now, 0)), sumPrev = round2(rows.reduce((a, r) => a + r.prev, 0));
+    const deltaText = (d) => (Math.abs(d) < 0.005 ? `<span class="delta">변화 없음</span>` : `<span class="delta ${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${money(Math.abs(d))}</span>`);
+    $("shopSub").textContent = `${Number(prevKey.slice(5))}월과 비교`;
+    $("people").innerHTML = rows.map((r) => `
+      <div class="person">
+        <span class="who">${r.who}</span>
+        <span class="bar" title="이번 달 ${money(r.now)} · 지난달 ${money(r.prev)}"><span style="width:${(r.now / max * 100).toFixed(1)}%"></span>${r.prev ? `<i style="left:calc(${(r.prev / max * 100).toFixed(1)}% - 1px)"></i>` : ""}</span>
+        <span class="amt num"><b>${money(r.now)}</b><small>지난달 ${money(r.prev)} · ${deltaText(round2(r.now - r.prev))}</small></span>
+      </div>`).join("") + `
+      <div class="people-total"><span>쇼핑 합계 <b class="num">${money(sumNow)}</b></span><span class="num">지난달 ${money(sumPrev)} · ${deltaText(round2(sumNow - sumPrev))}</span></div>`;
+  }
+
   function renderMethods(list, exp) {
     const rows = groupSum(list.filter((e) => e.type === "expense"), (e) => methodName(e.method));
     $("methods").innerHTML = barRows(rows, exp, "이 달의 지출이 아직 없어요.");
@@ -1010,7 +1068,10 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
   function fillCats(type, selected) {
     if (type === "payment") return;
     const list = CATS[type];
-    $("fCat").innerHTML = list.map((c) => `<option${c === selected ? " selected" : ""}>${esc(c)}</option>`).join("");
+    const opt = (c) => `<option${c === selected ? " selected" : ""}>${esc(c)}</option>`;
+    $("fCat").innerHTML = type === "expense"
+      ? EXPENSE_GROUPS.map(([g, cats]) => `<optgroup label="${esc(g)}">${cats.map(opt).join("")}</optgroup>`).join("")
+      : list.map(opt).join("");
     if (selected && !list.includes(selected)) $("fCat").insertAdjacentHTML("beforeend", `<option selected>${esc(selected)}</option>`);
   }
   const defaultDate = () => (state.month === CUR_MONTH ? TODAY : `${state.month}-01`);
@@ -1018,7 +1079,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     state.editingId = null;
     const t = keepType ? typeVal() : "expense";
     $("t-" + t).checked = true;
-    if (t !== "payment") fillCats(t, keepType ? $("fCat").value : CATS[t][0]);
+    if (t !== "payment") fillCats(t, keepType ? $("fCat").value : firstCat(t));
     $("fAmount").value = ""; $("fMemo").value = ""; $("fDate").value = defaultDate();
     $("fMethod").value = state.lastMethod;
     $("formError").textContent = "";
@@ -1049,7 +1110,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
   }
 
   form.addEventListener("change", (ev) => {
-    if (ev.target.name === "type") { fillCats(typeVal(), CATS[typeVal()] ? CATS[typeVal()][0] : ""); renderStmtSelect(true); applyTypeVisibility(); }
+    if (ev.target.name === "type") { fillCats(typeVal(), firstCat(typeVal())); renderStmtSelect(true); applyTypeVisibility(); }
     if (ev.target.id === "fPayCard") renderStmtSelect(true);
     if (ev.target.id === "fDate" && typeVal() === "payment" && !state.editingId) renderStmtSelect(true);
   });
@@ -1319,7 +1380,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     resetForm();
     $("t-" + type).checked = true;
     if (type === "expense") {
-      fillCats("expense", CATS.expense[0]);
+      fillCats("expense", firstCat("expense"));
       state.lastMethod = cardId;
       $("fDate").value = TODAY >= s && TODAY <= e ? TODAY : e;
     } else {
@@ -1553,6 +1614,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
       try { data = await decryptData(JSON.parse(text), sync.pass); }
       catch (e) { sync.pass = ""; saveSync(); setSync("err", "동기화 비밀번호가 맞지 않아요. 컴퓨터에서 정한 비밀번호를 넣어 주세요"); renderSync(); return; }
       state.entries = Array.isArray(data.entries) ? data.entries : [];
+      migrateCats(state.entries);
       applySettings(data.settings);
       try { localStorage.setItem(LS_KEY, JSON.stringify({ entries: state.entries, settings: settingsBody() })); } catch (e) {}
       sync.remoteSavedAt = data.savedAt || ""; saveSync();
@@ -1685,7 +1747,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
   });
 
   // ---------- start ----------
-  fillCats("expense", CATS.expense[0]);
+  fillCats("expense", firstCat("expense"));
   $("fDate").value = defaultDate();
   state.readonly = sync.role === "viewer";
   document.body.classList.toggle("readonly", state.readonly);
@@ -1730,6 +1792,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     const msg = `백업 파일의 내역 ${data.entries.length}건, 카드 ${(data.settings && data.settings.cards || []).length}장으로 지금 기록을 바꿀까요?\n지금 이 기기에 있는 내역 ${state.entries.length}건은 지워져요.`;
     if (!window.confirm(msg)) return;
     state.entries = data.entries.filter((e) => e && e.id && e.date && e.type);
+    migrateCats(state.entries);
     applySettings(data.settings);
     saveLocal();
     resetForm();
