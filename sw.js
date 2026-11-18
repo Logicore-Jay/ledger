@@ -1,6 +1,6 @@
 // 오프라인에서도 가계부가 열리도록 앱 파일을 기기에 보관한다.
 // 앱 파일을 고친 뒤 다시 올릴 때는 VERSION 숫자를 올려야 휴대폰이 새 버전을 받는다.
-const VERSION = "ledger-v6";
+const VERSION = "ledger-v7";
 const APP_FILES = ["./", "./index.html", "./manifest.webmanifest?v=pig", "./icon-pig-192.png", "./icon-pig-512.png", "./apple-touch-icon-pig.png"];
 
 self.addEventListener("install", (event) => {

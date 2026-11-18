@@ -161,17 +161,16 @@ form.entry, form.cardform { display: grid; gap: 12px; }
 .day + .day { margin-top: 10px; }
 .dayhead { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 6px 2px; border-bottom: 1px solid var(--line); }
 .dayhead strong { color: var(--ink); font-weight: 600; }
-.item { display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px; align-items: center; padding: 9px 6px; border-radius: 8px; }
+.item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 6px 6px; border-radius: 8px; min-height: 38px; }
 .item.clickable { cursor: pointer; }
 .item.clickable:hover { background: var(--accent-soft); }
 .item.active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); white-space: nowrap; }
 .tag.income { color: var(--income); border-color: color-mix(in srgb, var(--income) 35%, var(--line)); }
 .tag.payment { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
-.memo { overflow: hidden; min-width: 0; display: grid; }
-.memo b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.memo b.none { color: var(--muted); }
-.memo small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memo { overflow: hidden; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.memo b { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; min-width: 0; }
+.memo small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; min-width: 0; }
 .amt-cell { font-weight: 600; white-space: nowrap; text-align: right; }
 .amt-cell.income { color: var(--income); }
 .amt-cell.payment { color: var(--muted); }
@@ -921,14 +920,23 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     const isPay = e.type === "payment";
     const sign = e.type === "income" ? "+" : "−";
     const tagText = isPay ? "카드 대금" : esc(e.category || "기타");
-    const memo = e.memo ? `<b>${esc(e.memo)}</b>` : `<b class="none">메모 없음</b>`;
+    // 한 줄: [분류] 메모(있을 때만) 결제수단(주로 쓰는 것과 다를 때만) ... 금액
     let sub = "";
-    if (isPay) { const c = cardById(e.card); sub = `${esc(c ? c.name : "삭제된 카드")}${e.stmt && c ? " · " + esc(stmtLabel(c, e.stmt).title) : ""}`; }
-    else if (e.type === "expense") sub = esc(methodName(e.method));
-    if (opts.showDate) sub = `${md(e.date)} · ${sub}`;
-    const inner = `<span class="tag ${e.type}">${tagText}</span><span class="memo">${memo}${sub ? `<small>${sub}</small>` : ""}</span><span class="amt-cell num ${e.type}">${sign}${money(e.amount).replace("−", "")}</span>`;
-    if (e.example || state.readonly) return `<div class="item">${inner}<span></span></div>`;
-    return `<div class="item clickable${state.editingId === e.id ? " active" : ""}" data-id="${esc(e.id)}" role="button" tabindex="0" aria-label="${tagText} ${money(e.amount)} 수정">${inner}<button class="del" type="button" data-del="${esc(e.id)}" aria-label="${tagText} ${money(e.amount)} 삭제">×</button></div>`;
+    if (isPay) { const c = cardById(e.card); sub = `${esc(c ? c.name : "삭제된 카드")}${e.stmt && c ? ` ${Number(e.stmt.slice(5))}월분` : ""}`; }
+    else if (e.type === "expense" && !opts.hideMethod && (e.method || "cash") !== opts.mainMethod) sub = esc(methodName(e.method));
+    if (opts.showDate) sub = md(e.date) + (sub ? ` · ${sub}` : "");
+    const text = `<span class="memo">${e.memo ? `<b>${esc(e.memo)}</b>` : ""}${sub ? `<small>${sub}</small>` : ""}</span>`;
+    const inner = `<span class="tag ${e.type}">${tagText}</span>${text}<span class="amt-cell num ${e.type}">${sign}${money(e.amount).replace("−", "")}</span>`;
+    if (e.example || state.readonly) return `<div class="item">${inner}</div>`;
+    return `<div class="item clickable${state.editingId === e.id ? " active" : ""}" data-id="${esc(e.id)}" role="button" tabindex="0" aria-label="${tagText} ${money(e.amount)} 수정·삭제">${inner}</div>`;
+  }
+  // 이 목록에서 가장 많이 쓴 결제 수단: 줄마다 반복하지 않고 제목 옆에 한 번만 알린다
+  function mainMethodOf(rows) {
+    const count = new Map();
+    for (const e of rows) if (e.type === "expense") { const m = e.method || "cash"; count.set(m, (count.get(m) || 0) + 1); }
+    let best = null, n = 0;
+    for (const [m, c] of count) if (c > n) { best = m; n = c; }
+    return best;
   }
 
   function renderList(list) {
@@ -942,6 +950,10 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     const subs = [];
     if (state.filter !== "all") subs.push({ expense: "지출만", income: "수입만", payment: "카드 대금만" }[state.filter]);
     if (mf !== "all") subs.push(methodName(mf));
+    const mainMethod = mf === "all" ? mainMethodOf(rows) : null;
+    const showsOthers = mainMethod && rows.some((e) => e.type === "expense" && (e.method || "cash") !== mainMethod);
+    if (mainMethod && showsOthers) subs.push(`결제 수단 표시 없으면 ${methodName(mainMethod)}`);
+    else if (mainMethod) subs.push(`모두 ${methodName(mainMethod)}`);
     $("listSub").textContent = subs.join(" · ");
     $("listCount").textContent = `${rows.length}건` + (rows.length ? ` · 지출 ${money(sum(rows.filter((e) => e.type === "expense")))}` : "");
     if (!rows.length) { $("list").innerHTML = `<p class="empty">${list.length ? "조건에 맞는 내역이 없어요." : "이 달에는 기록이 없어요. 왼쪽에서 첫 내역을 추가해 보세요."}</p>`; return; }
@@ -951,7 +963,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
     for (const [date, items] of groups) {
       const d = new Date(date + "T00:00:00");
       const spent = sum(items.filter((e) => e.type === "expense"));
-      html += `<div class="day"><div class="dayhead"><strong>${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})</strong><span class="num">${spent ? "지출 " + money(spent) : ""}</span></div>${items.map((e) => entryRow(e)).join("")}</div>`;
+      html += `<div class="day"><div class="dayhead"><strong>${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})</strong><span class="num">${spent ? money(spent) : ""}</span></div>${items.map((e) => entryRow(e, { mainMethod, hideMethod: mf !== "all" })).join("")}</div>`;
     }
     $("list").innerHTML = html;
   }
@@ -1279,7 +1291,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
       </div>
       ${recon}
       <div class="cats">${barRows(catRows, charged, "이 명세서 기간에 기록된 사용이 없어요.")}</div>
-      <div>${charges.length ? charges.map((e) => entryRow(e, { showDate: true })).join("") : ""}</div>
+      <div>${charges.length ? charges.map((e) => entryRow(e, { showDate: true, hideMethod: true })).join("") : ""}</div>
       ${card.id.startsWith("exc") ? "" : `<div class="actions"><button class="textbtn" type="button" data-addcharge="${esc(card.id)}">+ 이 명세서에 사용 내역 추가</button><button class="textbtn" type="button" data-addpay="${esc(card.id)}">+ 이 명세서 대금 납부 기록</button></div>`}
       <h2>최근 납부 기록</h2>
       <div class="paylist">${recentPays.length ? recentPays.map((e) => `<div><span>${e.date}${e.stmt ? ` · ${esc(stmtLabel(card, e.stmt).title)}` : ""}</span><span class="num">${money(e.amount)}</span></div>`).join("") : `<p class="empty">납부 기록이 없어요.</p>`}</div>`;
