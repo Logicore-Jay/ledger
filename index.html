@@ -110,7 +110,8 @@ header.top { display: flex; flex-wrap: wrap; align-items: center; justify-conten
 form.entry, form.cardform { display: grid; gap: 12px; }
 .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); border-radius: 8px; padding: 3px; background: var(--bg); }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
-.seg label { text-align: center; padding: 7px 4px; border-radius: 6px; font-weight: 600; color: var(--muted); cursor: pointer; font-size: 14px; }
+.seg label { text-align: center; padding: 7px 4px; white-space: nowrap; border-radius: 6px; font-weight: 600; color: var(--muted); cursor: pointer; font-size: 14px; }
+.kindseg label { font-size: 13.5px; padding: 7px 2px; }
 .seg input:checked + label { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
 .seg input#t-expense:checked + label { color: var(--expense); }
 .seg input#t-income:checked + label { color: var(--income); }
@@ -408,10 +409,10 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
           <div class="field"><label for="cName">카드 이름</label><input id="cName" maxlength="40" autocomplete="off" placeholder="예: 주 사용 카드, 가구 할부 카드"></div>
           <div class="field">
             <span class="lbl" id="kindLbl">갚는 방식</span>
-            <div class="seg" role="radiogroup" aria-labelledby="kindLbl">
+            <div class="seg kindseg" role="radiogroup" aria-labelledby="kindLbl">
               <input type="radio" name="kind" id="k-full" value="full" checked><label for="k-full">매월 전액</label>
               <input type="radio" name="kind" id="k-fixed" value="fixed"><label for="k-fixed">고정 금액</label>
-              <input type="radio" name="kind" id="k-minimum" value="minimum"><label for="k-minimum">최소 금액·이월</label>
+              <input type="radio" name="kind" id="k-minimum" value="minimum"><label for="k-minimum">최소·이월</label>
               <input type="radio" name="kind" id="k-random" value="random"><label for="k-random">랜덤</label>
             </div>
             <span class="help" id="kindHelp"></span>
@@ -532,7 +533,7 @@ body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
   const KIND = {
     full: { label: "매월 전액", help: "매달 명세서 금액을 전부 갚아요. 낸 금액과 기록한 사용 내역을 명세서별로 맞춰 볼 수 있어요." },
     fixed: { label: "고정 금액", help: "매달 정해진 금액씩 갚아요. 남은 잔액과 완납 예상 시점을 보여 드려요." },
-    minimum: { label: "최소 금액·이월", help: "최소 금액만 내고 나머지는 이월해요. 무이자가 끝나기 전에 다 갚으려면 매달 얼마가 필요한지 알려 드려요." },
+    minimum: { label: "최소·이월", help: "최소 금액만 내고 나머지는 이월해요. 무이자가 끝나기 전에 다 갚으려면 매달 얼마가 필요한지 알려 드려요." },
     random: { label: "랜덤", help: "정해진 금액 없이 그때그때 원하는 만큼 갚아요. 남은 잔액과 최근 납부, 지금 속도로 언제쯤 다 갚을지 보여 드려요." },
   };
   const DOW = ["일", "월", "화", "수", "목", "금", "토"];
