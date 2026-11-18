@@ -217,12 +217,36 @@ form.entry, form.cardform { display: grid; gap: 12px; }
 .toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--ink); color: var(--bg); border-radius: 10px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; font-size: 14px; box-shadow: 0 6px 24px rgb(0 0 0 / .2); max-width: calc(100% - 32px); z-index: 10; }
 .toast button { background: transparent; border: 0; color: var(--bg); font-weight: 700; text-decoration: underline; padding: 0; }
 
+/* Sync */
+.sync-steps { margin: 0; padding-left: 20px; font-size: 13.5px; color: var(--muted); display: grid; gap: 4px; }
+details.help summary { cursor: pointer; font-size: 13.5px; color: var(--accent); font-weight: 600; }
+details.help[open] summary { margin-bottom: 8px; }
+.syncline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.syncline .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.syncline[data-state="ok"] .dot { background: var(--accent); }
+.syncline[data-state="busy"] .dot { background: var(--warn); }
+.syncline[data-state="err"] .dot { background: var(--expense); }
+.syncline[data-state="err"] { color: var(--expense); }
+.divider { border: 0; border-top: 1px solid var(--line); margin: 2px 0; }
+.rolepick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rolepick button { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: var(--radius); padding: 14px; display: grid; gap: 4px; }
+.rolepick button:hover { border-color: var(--accent); }
+.rolepick strong { font-size: 15px; }
+.rolepick span { font-size: 13px; color: var(--muted); }
+.viewbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--accent-soft); border-radius: var(--radius); padding: 10px 14px; font-size: 14px; }
+
+/* 보기 전용(휴대폰): 입력·수정 도구를 숨긴다 */
+body.readonly #entryCard, body.readonly .del, body.readonly #budgetEditBtn, body.readonly #addCardBtn,
+body.readonly #cardFormCard, body.readonly [data-editcard], body.readonly [data-addcharge], body.readonly [data-addpay],
+body.readonly #backupLoadBtn, body.readonly .cur { display: none !important; }
+
 @media (max-width: 940px) {
   .summary { grid-template-columns: 1fr 1fr; }
   .main { grid-template-columns: 1fr; }
 }
 @media (max-width: 520px) {
   .wrap { padding: 16px 16px 64px; }
+  .rolepick { grid-template-columns: 1fr; }
   .tile .v { font-size: 19px; }
   .two { grid-template-columns: 1fr; }
   .stats { grid-template-columns: 1fr 1fr; }
@@ -289,7 +313,7 @@ form.entry, form.cardform { display: grid; gap: 12px; }
 
     <div class="main">
       <div class="col">
-        <section class="card" aria-labelledby="formTitle">
+        <section class="card" id="entryCard" aria-labelledby="formTitle">
           <h2 id="formTitle"><span>기록하기</span> <span class="editing-tag" id="editingTag" hidden>수정 중</span></h2>
           <form class="entry" id="entryForm" novalidate>
             <div class="seg" role="radiogroup" aria-label="구분">
@@ -418,9 +442,73 @@ form.entry, form.cardform { display: grid; gap: 12px; }
     </div>
   </div>
 
-  <section class="card" aria-labelledby="backupTitle">
-    <h2 id="backupTitle">데이터 백업 <span class="sub" id="backupSub"></span></h2>
-    <p class="note" style="margin:0">기록은 이 기기의 브라우저 안에만 저장돼요. 휴대폰을 바꾸거나 브라우저 데이터를 지우면 사라지니, 가끔 백업 파일을 저장해 두세요. 다른 기기로 옮길 때도 이 파일을 불러오면 돼요.</p>
+  <section class="card" id="syncCard" aria-labelledby="syncTitle">
+    <h2 id="syncTitle">휴대폰 동기화 <span class="sub" id="syncRole"></span></h2>
+
+    <!-- 1) 역할 고르기 -->
+    <div id="rolePick" hidden>
+      <p class="note" style="margin:0 0 10px">이 기기에서 가계부를 어떻게 쓰실 건가요? 기기마다 한 번만 정하면 돼요.</p>
+      <div class="rolepick">
+        <button type="button" data-role="editor"><strong>여기서 입력해요</strong><span>컴퓨터. 기록할 때마다 암호화해서 휴대폰 쪽으로 자동으로 보내요.</span></button>
+        <button type="button" data-role="viewer"><strong>보기만 해요</strong><span>휴대폰. 앱을 열면 컴퓨터에서 보낸 최신 내용을 받아서 보여 줘요.</span></button>
+      </div>
+    </div>
+
+    <!-- 2) 입력용(컴퓨터) 설정 -->
+    <form class="cardform" id="editorForm" novalidate hidden>
+      <div class="field">
+        <label for="sToken">GitHub 토큰</label>
+        <input id="sToken" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_로 시작하는 값">
+        <span class="help">이 컴퓨터의 브라우저에만 저장돼요. 휴대폰에는 필요 없어요.</span>
+      </div>
+      <details class="help">
+        <summary>토큰 만드는 법</summary>
+        <ol class="sync-steps">
+          <li>GitHub 오른쪽 위 프로필 사진 → <b>Settings</b></li>
+          <li>왼쪽 맨 아래 <b>Developer settings</b> → <b>Personal access tokens</b> → <b>Fine-grained tokens</b> → <b>Generate new token</b></li>
+          <li>Token name: <b>가계부 동기화</b>, Expiration: 원하는 기간</li>
+          <li>Repository access: <b>Only select repositories</b> → <b>ledger</b></li>
+          <li>Permissions의 Repository permissions에서 <b>Contents</b>를 <b>Read and write</b>로</li>
+          <li><b>Generate token</b>을 누르고 나온 값을 복사해 위 칸에 붙여 넣기</li>
+        </ol>
+      </details>
+      <div class="two">
+        <div class="field"><label for="sPass">동기화 비밀번호</label><input id="sPass" type="password" autocomplete="new-password" placeholder="8자 이상"></div>
+        <div class="field"><label for="sPass2">비밀번호 확인</label><input id="sPass2" type="password" autocomplete="new-password"></div>
+      </div>
+      <p class="formnote">이 비밀번호로 기록을 잠가서 올려요. 휴대폰에서 같은 비밀번호를 한 번 넣으면 볼 수 있어요. <b>잊으면 휴대폰에서 열 수 없으니</b> 꼭 기억해 두세요. 4단어 이상의 문장처럼 길게 만들면 안전해요.</p>
+      <div class="field"><label for="sRepo">저장소</label><input id="sRepo" autocomplete="off" spellcheck="false" placeholder="아이디/저장소이름"></div>
+      <p class="form-error" id="editorError" role="alert"></p>
+      <div class="actions">
+        <button class="primary" type="submit" id="editorSubmit">연결하고 휴대폰으로 보내기</button>
+        <button class="ghost" type="button" data-sync-cancel>취소</button>
+      </div>
+    </form>
+
+    <!-- 3) 보기용(휴대폰) 설정 -->
+    <form class="cardform" id="viewerForm" novalidate hidden>
+      <div class="field"><label for="vPass">동기화 비밀번호</label><input id="vPass" type="password" autocomplete="current-password" placeholder="컴퓨터에서 정한 비밀번호"></div>
+      <div class="field"><label for="vRepo">저장소</label><input id="vRepo" autocomplete="off" spellcheck="false"></div>
+      <p class="form-error" id="viewerError" role="alert"></p>
+      <div class="actions">
+        <button class="primary" type="submit">최신 내용 받기</button>
+        <button class="ghost" type="button" data-sync-cancel>취소</button>
+      </div>
+    </form>
+
+    <!-- 4) 연결된 상태 -->
+    <div id="syncInfo" hidden>
+      <div class="syncline" id="syncLine"><span class="dot"></span><span id="syncText"></span></div>
+      <div class="actions" style="margin-top:10px">
+        <button class="textbtn" type="button" id="syncNowBtn">지금 보내기</button>
+        <button class="textbtn" type="button" id="syncEditBtn">동기화 설정 바꾸기</button>
+        <button class="textbtn" type="button" id="roleResetBtn">기기 역할 바꾸기</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <h2>백업 파일 <span class="sub" id="backupSub"></span></h2>
+    <p class="note" style="margin:0">기록은 이 기기의 브라우저에도 저장돼요. 만일을 위해 가끔 백업 파일을 저장해 두세요.</p>
     <div class="actions">
       <button class="textbtn" type="button" id="backupSave">백업 파일 저장</button>
       <button class="textbtn" type="button" id="backupLoadBtn">백업 파일 불러오기</button>
@@ -618,6 +706,7 @@ form.entry, form.cardform { display: grid; gap: 12px; }
   function saveLocal() {
     try { localStorage.setItem(LS_KEY, JSON.stringify({ entries: state.entries, settings: settingsBody() })); }
     catch (e) { toast("이 브라우저에 저장하지 못했어요"); }
+    onLocalSaved();
   }
   async function initStorage() {
     const c = window.claude;
@@ -688,6 +777,9 @@ form.entry, form.cardform { display: grid; gap: 12px; }
   function render() {
     $("monthLabel").textContent = monthName(state.month);
     $("exampleBanner").hidden = !showingExamples();
+    $("exampleBanner").innerHTML = state.readonly
+      ? "컴퓨터에서 보낸 기록을 아직 받지 못했어요. 지금 보이는 카드와 내역은 <strong>예시</strong>예요."
+      : "지금 보이는 카드와 내역은 <strong>예시</strong>예요. 카드 탭에서 내 카드를 추가하거나 첫 내역을 기록하면 예시는 사라집니다.";
     $("currency").value = state.currency;
     $("curSym").textContent = sym();
     $("fAmount").placeholder = isKRW() ? "0" : "0.00";
@@ -818,7 +910,7 @@ form.entry, form.cardform { display: grid; gap: 12px; }
     else if (e.type === "expense") sub = esc(methodName(e.method));
     if (opts.showDate) sub = `${md(e.date)} · ${sub}`;
     const inner = `<span class="tag ${e.type}">${tagText}</span><span class="memo">${memo}${sub ? `<small>${sub}</small>` : ""}</span><span class="amt-cell num ${e.type}">${sign}${money(e.amount).replace("−", "")}</span>`;
-    if (e.example) return `<div class="item">${inner}<span></span></div>`;
+    if (e.example || state.readonly) return `<div class="item">${inner}<span></span></div>`;
     return `<div class="item clickable${state.editingId === e.id ? " active" : ""}" data-id="${esc(e.id)}" role="button" tabindex="0" aria-label="${tagText} ${money(e.amount)} 수정">${inner}<button class="del" type="button" data-del="${esc(e.id)}" aria-label="${tagText} ${money(e.amount)} 삭제">×</button></div>`;
   }
 
@@ -907,6 +999,7 @@ form.entry, form.cardform { display: grid; gap: 12px; }
     applyTypeVisibility();
   }
   function startEdit(id) {
+    if (state.readonly) return;
     const e = state.entries.find((x) => x.id === id);
     if (!e) return;
     if (state.view !== "ledger") { location.hash = "ledger"; state.view = "ledger"; }
@@ -1272,11 +1365,292 @@ form.entry, form.cardform { display: grid; gap: 12px; }
     } catch (e) { state.cards = prevCards; render(); toast(explain(e)); }
   });
 
+  // ---------- sync: 컴퓨터(입력) → 암호화 → GitHub data 브랜치 → 휴대폰(보기) ----------
+  const SYNC_KEY = "monthly-ledger-sync";
+  const SYNC_FILE = "data.enc.json";
+  const SYNC_BRANCH = "data";
+  const DEFAULT_REPO = "Logicore-Jay/ledger";
+  const PUSH_DELAY = 5000;
+  const sync = (() => {
+    const base = { role: "", repo: DEFAULT_REPO, token: "", pass: "", lastPush: "", remoteSavedAt: "", dirty: false };
+    try { return Object.assign(base, JSON.parse(localStorage.getItem(SYNC_KEY) || "{}")); } catch (e) { return base; }
+  })();
+  const syncUi = { editing: false, state: "", msg: "" };
+  function saveSync() { try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch (e) {} }
+  const isEditorReady = () => sync.role === "editor" && !!sync.token && !!sync.pass;
+  const isViewerReady = () => sync.role === "viewer" && !!sync.pass;
+  const clock = (iso) => { if (!iso) return ""; const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+  // --- 암호화 (AES-GCM 256, 비밀번호 → PBKDF2-SHA256) ---
+  const te = new TextEncoder(), td = new TextDecoder();
+  const ITER = 310000;
+  function toB64(buf) { const b = new Uint8Array(buf); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
+  const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  async function deriveKey(pass, salt, iter) {
+    const base = await crypto.subtle.importKey("raw", te.encode(pass), "PBKDF2", false, ["deriveKey"]);
+    return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  }
+  async function encryptData(obj, pass) {
+    const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(pass, salt, ITER);
+    const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, te.encode(JSON.stringify(obj)));
+    return { app: "monthly-ledger-sync", v: 1, kdf: "PBKDF2-SHA256", iter: ITER, salt: toB64(salt), iv: toB64(iv), ct: toB64(ct) };
+  }
+  async function decryptData(file, pass) {
+    if (!file || file.app !== "monthly-ledger-sync" || !file.ct) throw new Error("format");
+    const key = await deriveKey(pass, fromB64(file.salt), file.iter || ITER);
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromB64(file.iv) }, key, fromB64(file.ct));
+    return JSON.parse(td.decode(pt));
+  }
+
+  // --- GitHub ---
+  class SyncError extends Error {}
+  function ghFetch(path, opts = {}) {
+    const headers = { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", Authorization: "Bearer " + sync.token };
+    if (opts.body) headers["Content-Type"] = "application/json";
+    return fetch("https://api.github.com" + path, { ...opts, cache: "no-store", headers }).catch(() => { throw new SyncError("인터넷 연결을 확인해 주세요"); });
+  }
+  function ghProblem(status) {
+    if (status === 401) return "토큰이 맞지 않거나 만료됐어요. 동기화 설정에서 새 토큰을 넣어 주세요";
+    if (status === 403) return "토큰에 쓰기 권한이 없어요. 토큰의 Contents 권한을 Read and write로 해 주세요";
+    if (status === 404) return "저장소를 찾지 못했어요. 저장소 이름과 토큰의 저장소 선택(ledger)을 확인해 주세요";
+    return `GitHub가 요청을 받지 않았어요 (${status}). 잠시 후 다시 시도해 주세요`;
+  }
+  let branchReady = false, lastSha = null;
+  async function ensureBranch() {
+    if (branchReady) return;
+    const repo = sync.repo;
+    let r = await ghFetch(`/repos/${repo}/git/ref/heads/${SYNC_BRANCH}`);
+    if (r.ok) { branchReady = true; return; }
+    if (r.status !== 404) throw new SyncError(ghProblem(r.status));
+    r = await ghFetch(`/repos/${repo}`);
+    if (!r.ok) throw new SyncError(ghProblem(r.status));
+    const info = await r.json();
+    r = await ghFetch(`/repos/${repo}/git/ref/heads/${info.default_branch}`);
+    if (!r.ok) throw new SyncError(ghProblem(r.status));
+    const head = await r.json();
+    r = await ghFetch(`/repos/${repo}/git/refs`, { method: "POST", body: JSON.stringify({ ref: `refs/heads/${SYNC_BRANCH}`, sha: head.object.sha }) });
+    if (!r.ok && r.status !== 422) throw new SyncError(ghProblem(r.status));
+    branchReady = true;
+  }
+  async function remoteSha() {
+    const r = await ghFetch(`/repos/${sync.repo}/contents/${SYNC_FILE}?ref=${SYNC_BRANCH}`);
+    if (r.status === 404) return null;
+    if (!r.ok) throw new SyncError(ghProblem(r.status));
+    return (await r.json()).sha;
+  }
+  const putFile = (content, sha) => ghFetch(`/repos/${sync.repo}/contents/${SYNC_FILE}`, {
+    method: "PUT",
+    body: JSON.stringify({ message: "가계부 동기화", content, branch: SYNC_BRANCH, ...(sha ? { sha } : {}) }),
+  });
+
+  // --- 입력용: 저장할 때마다 잠시 뒤 자동으로 보냄 ---
+  let pushTimer = null, pushing = false, pushAgain = false;
+  function onLocalSaved() {
+    if (!isEditorReady()) return;
+    sync.dirty = true; saveSync();
+    setSync("busy", "곧 휴대폰으로 보내요…");
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(pushNow, PUSH_DELAY);
+  }
+  async function pushNow() {
+    clearTimeout(pushTimer);
+    if (!isEditorReady()) return;
+    if (pushing) { pushAgain = true; return; }
+    pushing = true;
+    setSync("busy", "휴대폰으로 보내는 중…");
+    try {
+      await ensureBranch();
+      const savedAt = new Date().toISOString();
+      const file = await encryptData({ entries: state.entries, settings: settingsBody(), savedAt }, sync.pass);
+      const content = btoa(JSON.stringify(file));
+      let sha = lastSha !== null ? lastSha : await remoteSha();
+      let r = await putFile(content, sha);
+      if (r.status === 409 || r.status === 422) { sha = await remoteSha(); r = await putFile(content, sha); }
+      if (!r.ok) throw new SyncError(ghProblem(r.status));
+      lastSha = (await r.json()).content.sha;
+      sync.lastPush = savedAt; sync.dirty = false; saveSync();
+      setSync("ok", `휴대폰으로 보냄 · ${clock(savedAt)}`);
+    } catch (e) {
+      lastSha = null;
+      setSync("err", e instanceof SyncError ? e.message : "보내지 못했어요. 잠시 후 다시 시도해 주세요");
+    } finally {
+      pushing = false;
+      if (pushAgain) { pushAgain = false; pushNow(); }
+    }
+  }
+
+  // --- 보기용: 열 때마다 최신 내용을 받아 옴 ---
+  let pulling = false, lastPullAt = 0;
+  async function fetchRemoteText() {
+    const [owner, name] = sync.repo.split("/");
+    const urls = [
+      [`https://api.github.com/repos/${owner}/${name}/contents/${SYNC_FILE}?ref=${SYNC_BRANCH}`, { Accept: "application/vnd.github.raw+json" }],
+      [`https://raw.githubusercontent.com/${owner}/${name}/${SYNC_BRANCH}/${SYNC_FILE}?t=${Date.now()}`, {}],
+    ];
+    let notFound = false;
+    for (const [url, headers] of urls) {
+      try {
+        const r = await fetch(url, { cache: "no-store", headers });
+        if (r.ok) return await r.text();
+        if (r.status === 404) notFound = true;
+      } catch (e) { /* 다음 주소로 */ }
+    }
+    return notFound ? null : undefined;
+  }
+  async function pullNow() {
+    if (!isViewerReady() || pulling) return;
+    pulling = true; lastPullAt = Date.now();
+    setSync("busy", "최신 내용 받는 중…");
+    try {
+      const text = await fetchRemoteText();
+      if (text === null) { setSync("err", "컴퓨터에서 보낸 기록이 아직 없어요. 컴퓨터에서 동기화를 먼저 설정해 주세요"); return; }
+      if (text === undefined) { setSync("err", `인터넷에 연결되지 않아 ${sync.remoteSavedAt ? clock(sync.remoteSavedAt) + "에 받은" : "예전"} 내용을 보여 드려요`); return; }
+      let data;
+      try { data = await decryptData(JSON.parse(text), sync.pass); }
+      catch (e) { sync.pass = ""; saveSync(); setSync("err", "동기화 비밀번호가 맞지 않아요. 컴퓨터에서 정한 비밀번호를 넣어 주세요"); renderSync(); return; }
+      state.entries = Array.isArray(data.entries) ? data.entries : [];
+      applySettings(data.settings);
+      try { localStorage.setItem(LS_KEY, JSON.stringify({ entries: state.entries, settings: settingsBody() })); } catch (e) {}
+      sync.remoteSavedAt = data.savedAt || ""; saveSync();
+      state.loaded = true;
+      render();
+      setSync("ok", `컴퓨터에서 ${clock(sync.remoteSavedAt)}에 저장한 내용`);
+    } finally { pulling = false; }
+  }
+
+  // --- 화면 ---
+  function setSync(kind, msg) {
+    syncUi.state = kind; syncUi.msg = msg;
+    const line = $("syncLine");
+    line.dataset.state = kind; $("syncText").textContent = msg;
+    const head = { ok: "ok", busy: "loading", err: "err" }[kind] || "local";
+    const prefix = sync.role === "viewer" ? "보기 전용 · " : sync.role === "editor" ? "입력용 · " : "";
+    setStatus(head, prefix + msg);
+  }
+  function renderSync() {
+    const role = sync.role;
+    state.readonly = role === "viewer";
+    document.body.classList.toggle("readonly", state.readonly);
+    const needsEditor = role === "editor" && (!isEditorReady() || syncUi.editing);
+    const needsViewer = role === "viewer" && (!isViewerReady() || syncUi.editing);
+    $("rolePick").hidden = !!role;
+    $("editorForm").hidden = !needsEditor;
+    $("viewerForm").hidden = !needsViewer;
+    $("syncInfo").hidden = !role || needsEditor || needsViewer;
+    $("syncRole").textContent = role === "editor" ? "이 기기: 입력용" : role === "viewer" ? "이 기기: 보기 전용" : "";
+    $("syncNowBtn").textContent = role === "viewer" ? "지금 새로 받기" : "지금 보내기";
+    // 처음 설정할 때는 카드를 맨 위로, 다 되면 맨 아래로
+    const card = $("syncCard"), wrap = document.querySelector(".wrap");
+    const setupNeeded = !role || needsEditor || needsViewer;
+    if (setupNeeded && card.previousElementSibling !== document.querySelector("header.top")) wrap.insertBefore(card, document.querySelector(".tabs"));
+    if (!setupNeeded && card !== wrap.lastElementChild) wrap.appendChild(card);
+    if (needsEditor) {
+      $("sRepo").value = sync.repo;
+      $("sToken").placeholder = sync.token ? "저장된 토큰 유지 (바꿀 때만 입력)" : "github_pat_로 시작하는 값";
+      $("sPass").placeholder = sync.pass ? "저장된 비밀번호 유지" : "8자 이상";
+    }
+    if (needsViewer) $("vRepo").value = sync.repo;
+    if (!role) setStatus("local", "이 기기에 저장됨 · 동기화 설정 전");
+    else if (!needsEditor && !needsViewer && !syncUi.state) {
+      if (role === "editor") setSync(sync.dirty ? "busy" : "ok", sync.dirty ? "보내지 못한 변경이 있어요" : sync.lastPush ? `휴대폰으로 보냄 · ${clock(sync.lastPush)}` : "연결됨");
+      else setSync("ok", sync.remoteSavedAt ? `컴퓨터에서 ${clock(sync.remoteSavedAt)}에 저장한 내용` : "연결됨");
+    } else if (needsEditor || needsViewer) setStatus("local", role === "editor" ? "입력용 · 동기화 설정을 마쳐 주세요" : "보기 전용 · 비밀번호를 넣어 주세요");
+  }
+
+  document.querySelector(".rolepick").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-role]"); if (!b) return;
+    if (b.dataset.role === "viewer" && state.entries.length) {
+      if (!window.confirm(`이 기기에 직접 적은 내역 ${state.entries.length}건이 있어요. 보기 전용으로 바꾸면 컴퓨터에서 받은 내용으로 바뀌어요. 계속할까요?\n(필요하면 먼저 아래 '백업 파일 저장'을 해 두세요)`)) return;
+    }
+    sync.role = b.dataset.role;
+    sync.pass = ""; sync.remoteSavedAt = ""; sync.dirty = false;
+    if (sync.role === "viewer") sync.token = ""; // 보기용 기기에는 토큰을 남기지 않는다
+    saveSync();
+    syncUi.editing = false; syncUi.state = "";
+    if (state.readonly && state.editingId) resetForm();
+    renderSync(); render();
+    (sync.role === "editor" ? $("sToken") : $("vPass")).focus();
+  });
+  document.querySelectorAll("[data-sync-cancel]").forEach((b) => b.addEventListener("click", () => {
+    if (syncUi.editing) { syncUi.editing = false; }
+    else { sync.role = ""; saveSync(); }
+    syncUi.state = ""; renderSync(); render();
+  }));
+
+  $("editorForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const err = (m, f) => { $("editorError").textContent = m; if (f) $(f).focus(); };
+    const token = $("sToken").value.trim() || sync.token;
+    const pass = $("sPass").value, pass2 = $("sPass2").value;
+    const repo = $("sRepo").value.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/$/, "");
+    if (!token) return err("GitHub 토큰을 붙여 넣어 주세요.", "sToken");
+    if (!pass && !sync.pass) return err("동기화 비밀번호를 정해 주세요.", "sPass");
+    if (pass && pass.length < 8) return err("비밀번호는 8자 이상으로 정해 주세요.", "sPass");
+    if (pass !== pass2) return err("두 비밀번호가 서로 달라요.", "sPass2");
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return err("저장소는 '아이디/저장소이름' 형태로 적어 주세요. 예: Logicore-Jay/ledger", "sRepo");
+    $("editorSubmit").disabled = true; err("");
+    const prev = { token: sync.token, repo: sync.repo };
+    sync.token = token; sync.repo = repo;
+    try {
+      const r = await ghFetch(`/repos/${repo}`);
+      if (!r.ok) throw new SyncError(ghProblem(r.status));
+      const info = await r.json();
+      if (info.permissions && !info.permissions.push) throw new SyncError(ghProblem(403));
+    } catch (e) {
+      sync.token = prev.token; sync.repo = prev.repo;
+      $("editorSubmit").disabled = false;
+      return err(e instanceof SyncError ? e.message : "확인하지 못했어요. 잠시 후 다시 시도해 주세요");
+    }
+    if (pass) sync.pass = pass;
+    sync.dirty = true; saveSync();
+    branchReady = false; lastSha = null;
+    $("sToken").value = ""; $("sPass").value = ""; $("sPass2").value = "";
+    $("editorSubmit").disabled = false;
+    syncUi.editing = false;
+    renderSync();
+    await pushNow();
+    if (syncUi.state === "ok") toast("연결됐어요. 이제 기록할 때마다 휴대폰으로 자동으로 보내요");
+  });
+
+  $("viewerForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const pass = $("vPass").value;
+    const repo = $("vRepo").value.trim().replace(/^https?:\/\/github\.com\//, "").replace(/\.git$/, "").replace(/\/$/, "");
+    if (!pass) { $("viewerError").textContent = "컴퓨터에서 정한 동기화 비밀번호를 넣어 주세요."; $("vPass").focus(); return; }
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { $("viewerError").textContent = "저장소는 '아이디/저장소이름' 형태로 적어 주세요."; return; }
+    $("viewerError").textContent = "";
+    sync.pass = pass; sync.repo = repo; saveSync();
+    $("vPass").value = "";
+    syncUi.editing = false;
+    renderSync();
+    await pullNow();
+    if (!sync.pass) { renderSync(); $("viewerError").textContent = "비밀번호가 맞지 않아요. 다시 넣어 주세요."; }
+  });
+
+  $("syncNowBtn").addEventListener("click", () => (sync.role === "viewer" ? pullNow() : pushNow()));
+  $("syncEditBtn").addEventListener("click", () => { syncUi.editing = true; renderSync(); });
+  $("roleResetBtn").addEventListener("click", () => {
+    clearTimeout(pushTimer);
+    sync.role = ""; saveSync(); syncUi.state = ""; syncUi.editing = false;
+    renderSync(); render();
+    $("syncCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && sync.role === "viewer" && Date.now() - lastPullAt > 20000) pullNow();
+    if (document.visibilityState === "hidden" && isEditorReady() && sync.dirty) pushNow();
+  });
+
   // ---------- start ----------
   fillCats("expense", CATS.expense[0]);
   $("fDate").value = defaultDate();
+  state.readonly = sync.role === "viewer";
+  document.body.classList.toggle("readonly", state.readonly);
   route();
-  useLocal("이 기기에 저장됨 · 로그인 필요 없음");
+  useLocal("이 기기에 저장됨");
+  renderSync();
+  if (sync.role === "viewer" && isViewerReady()) pullNow();
+  if (isEditorReady() && sync.dirty) pushNow();
 
   // ---------- standalone app: backup, offline ----------
   const BK_KEY = "monthly-ledger-last-backup";
